@@ -1,0 +1,2046 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#002B49">
+<meta name="format-detection" content="telephone=no">
+<title>Mapa UNAQ</title>
+<style>
+  :root {
+    --bg: #0A1118; --card: #14212D; --card2: #1B2B3A; --line: #26394B;
+    --text: #EAF0F6; --muted: #95A6B7;
+    --blue: #002B49; --sky: #00A3E0; --accent: #FF6B00; --gold: #D4AF37;
+    --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%; overscroll-behavior: none; }
+  body { overflow: hidden; }
+  button, label.btn { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; touch-action: manipulation; }
+  input, select, textarea { font: inherit; font-size: 16px; } /* 16px evita el zoom automático en iPhone */
+  a { color: var(--sky); }
+  [hidden] { display: none !important; }
+  svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  svg.i.sm { width: 18px; height: 18px; }
+
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* Barra superior */
+  .topbar { display: flex; align-items: center; gap: 8px; min-height: 56px; z-index: 30;
+    padding: calc(6px + var(--sat)) calc(12px + var(--sar)) 6px calc(6px + var(--sal));
+    background: var(--blue); border-bottom: 1px solid var(--line); }
+  .iconbtn { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; }
+  .iconbtn:active { background: rgba(255,255,255,.1); }
+  .topbar .titles { flex: 1; min-width: 0; }
+  .topbar h1 { font-size: 17px; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar p { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag { font-size: 11px; font-weight: 700; color: var(--sky); border: 1px solid rgba(0,163,224,.45); background: rgba(0,163,224,.12); padding: 3px 7px; border-radius: 7px; letter-spacing: .5px; }
+
+  main { flex: 1; position: relative; min-height: 0; }
+  .view { position: absolute; inset: 0; display: none; flex-direction: column; }
+  .view.active { display: flex; }
+  .view.scroll { overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 18px calc(16px + var(--sar)) calc(28px + var(--sab)) calc(16px + var(--sal)); gap: 16px; }
+
+  /* Menú lateral (tres líneas) */
+  .scrim { position: fixed; inset: 0; background: rgba(3,8,12,.6); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 40; }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  #drawer { position: fixed; top: 0; bottom: 0; left: 0; width: min(82vw, 320px); z-index: 50; background: var(--card);
+    border-right: 1px solid var(--line); transform: translateX(-102%); transition: transform .28s ease;
+    display: flex; flex-direction: column; padding: calc(16px + var(--sat)) 12px calc(16px + var(--sab)) calc(12px + var(--sal)); }
+  #drawer.open { transform: none; }
+  .drawerHead { display: flex; align-items: center; gap: 12px; padding: 6px 6px 18px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+  .logo { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, var(--sky), var(--blue)); }
+  .drawerHead b { display: block; font-size: 16px; }
+  .drawerHead small { color: var(--muted); font-size: 12px; }
+  .navItem { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 14px 12px; border-radius: 14px; font-size: 16px; font-weight: 600; color: #C9D6E2; }
+  .navItem:active { background: rgba(255,255,255,.06); }
+  .navItem.active { background: rgba(0,163,224,.15); color: #fff; }
+  .navItem.active svg { color: var(--sky); }
+  .drawerFoot { margin-top: auto; font-size: 12px; color: var(--muted); padding: 8px; line-height: 1.5; }
+
+  /* ===== Vista Mapa ===== */
+  .mapTools { padding: 10px calc(12px + var(--sar)) 8px calc(12px + var(--sal)); background: var(--bg); position: relative; z-index: 15; }
+  .search { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 0 6px 0 12px; height: 46px; }
+  .search:focus-within { border-color: var(--sky); }
+  .search svg { color: var(--muted); }
+  .search input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: var(--text); height: 100%; }
+  .search input::placeholder { color: #6E8193; }
+  .results { position: absolute; left: calc(12px + var(--sal)); right: calc(12px + var(--sar)); top: 60px; max-height: 50vh; overflow-y: auto;
+    background: #101B25; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.5); z-index: 25; }
+  .result { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .result:last-child { border-bottom: 0; }
+  .result:active { background: rgba(255,255,255,.05); }
+  .result b { color: var(--sky); font-size: 15px; }
+  .result small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .result .where { margin-left: auto; font-size: 11px; color: #B8C6D3; background: var(--card2); padding: 3px 7px; border-radius: 6px; white-space: nowrap; }
+  .empty { padding: 14px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  .chips { display: flex; gap: 8px; overflow-x: auto; margin-top: 10px; padding-bottom: 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 18px;
+    background: var(--card); border: 1px solid var(--line); font-size: 13px; font-weight: 600; color: #C9D6E2; white-space: nowrap; }
+  .chip.active { background: var(--sky); border-color: var(--sky); color: #04131C; }
+  .chip .count { background: var(--gold); color: #0A1118; font-size: 11px; font-weight: 800; border-radius: 10px; padding: 1px 6px; }
+
+  .mapWrap { flex: 1; position: relative; min-height: 0; margin: 0 calc(8px + var(--sar)) 0 calc(8px + var(--sal)); border-radius: 18px; overflow: hidden;
+    background: #0D1720; border: 1px solid var(--line); }
+  #mapViewport { position: absolute; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; overflow: hidden; }
+  #mapCanvas, #mapCanvas svg { width: 100%; height: 100%; display: block; }
+  #mapCanvas svg { transform-origin: center center; will-change: transform; }
+  .room { fill-opacity: .42; stroke-width: 1.5; }
+  .room.sched { fill: var(--gold); fill-opacity: .85; stroke: #FFF3B0; stroke-width: 2.5; }
+  .room.hl { fill: var(--accent); fill-opacity: .92; stroke: #fff; stroke-width: 3; animation: pulse 1.1s infinite alternate; }
+  @keyframes pulse { from { fill-opacity: .6; } to { fill-opacity: 1; } }
+  .roomText { font-weight: 700; pointer-events: none; }
+  .zoomCol { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+  .zoomCol button { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: rgba(16,27,37,.92); border: 1px solid var(--line); }
+  .zoomCol button:active { background: #22374A; }
+  .mapHint { position: absolute; left: 10px; bottom: 10px; font-size: 11px; color: #9FB0C0; background: rgba(10,17,24,.8); padding: 5px 9px; border-radius: 8px; pointer-events: none; }
+
+  .toast { position: absolute; left: calc(12px + var(--sal)); right: calc(12px + var(--sar)); bottom: calc(76px + var(--sab)); z-index: 20;
+    display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 8px 10px 12px; border-radius: 16px;
+    background: rgba(16,27,37,.97); border: 1px solid var(--accent); box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+  .toast .pin { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,107,0,.18); color: var(--accent); flex-shrink: 0; }
+  .toast .txt { flex: 1; min-width: 0; }
+  .toast b { display: block; font-size: 15px; }
+  .toast small { display: block; font-size: 12px; color: #B8C6D3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast .go { font-size: 13px; font-weight: 700; color: var(--sky); padding: 8px; }
+
+  .bottombar { display: flex; gap: 10px; padding: 10px calc(12px + var(--sar)) calc(10px + var(--sab)) calc(12px + var(--sal)); background: var(--bg); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 50px; border-radius: 14px; padding: 0 16px; font-weight: 700; font-size: 15px; }
+  .btn.gold { background: var(--gold); color: #0A1118; }
+  .btn.dark { background: var(--card); border: 1px solid var(--line); color: var(--text); }
+  .btn.sky { background: var(--sky); color: #04131C; }
+  .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); height: 44px; font-size: 14px; }
+  .btn:active { filter: brightness(1.12); transform: scale(.99); }
+  .btn.full { width: 100%; }
+  .bottombar .btn { flex: 1; }
+  .badge { background: #0A1118; color: var(--gold); font-size: 12px; font-weight: 800; border-radius: 10px; padding: 1px 7px; }
+
+  /* Hojas inferiores */
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; max-height: 88vh; max-height: 88dvh; display: flex; flex-direction: column;
+    background: var(--card); border-top: 1px solid var(--line); border-radius: 22px 22px 0 0; transform: translateY(105%); transition: transform .3s ease;
+    padding-bottom: var(--sab); box-shadow: 0 -20px 50px rgba(0,0,0,.45); }
+  .sheet.open { transform: none; }
+  .grab { width: 40px; height: 5px; border-radius: 3px; background: #3A4F63; margin: 8px auto 2px; }
+  .sheetHead { display: flex; align-items: center; gap: 10px; padding: 6px calc(10px + var(--sar)) 8px calc(18px + var(--sal)); }
+  .sheetHead h2 { flex: 1; font-size: 18px; }
+  .sheetBody { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px calc(18px + var(--sar)) 22px calc(18px + var(--sal)); display: flex; flex-direction: column; gap: 14px; }
+  .sheetBody > *, .view.scroll > *, #scheduleResults > * { flex-shrink: 0; }
+  .hint { font-size: 14px; color: #C9D6E2; line-height: 1.45; }
+  .tips { list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .tips b { color: #D7E1EA; }
+  .status { font-size: 13px; border-radius: 12px; padding: 10px 12px; line-height: 1.4; }
+  .status.info { background: var(--card2); }
+  .status.ok { background: rgba(16,185,129,.15); color: #A7F3D0; border: 1px solid rgba(16,185,129,.4); }
+  .status.error { background: rgba(244,63,94,.14); color: #FECDD3; border: 1px solid rgba(244,63,94,.4); }
+  .dayChips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .dayChips::-webkit-scrollbar { display: none; }
+  .dayChip { flex-shrink: 0; height: 34px; padding: 0 13px; border-radius: 17px; font-size: 13px; font-weight: 700; background: var(--card2); border: 1px solid var(--line); color: #C9D6E2; }
+  .dayChip.active { background: var(--gold); border-color: var(--gold); color: #0A1118; }
+  .classList { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .classItem { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 12px; border-bottom: 1px solid var(--line); background: #111D28; }
+  .classItem:last-child { border-bottom: 0; }
+  .classItem .ciMain:active { background: #1A2A38; }
+  .classItem .code { min-width: 64px; font-weight: 800; color: var(--gold); font-size: 15px; }
+  .classItem .info { flex: 1; min-width: 0; }
+  .classItem .info span { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .classItem .info small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .warn { font-size: 13px; color: #FCD34D; line-height: 1.4; }
+  .warn button { color: var(--sky); text-decoration: underline; font-size: 13px; }
+  details.fmt { background: #111D28; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 13px; color: #C9D6E2; }
+  details.fmt summary { font-weight: 700; cursor: pointer; }
+  details.fmt table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+  details.fmt th, details.fmt td { border: 1px solid var(--line); padding: 5px 6px; text-align: left; }
+  details.fmt th { background: var(--card2); }
+  details.fmt p { margin-top: 8px; line-height: 1.45; }
+
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+  .stack > * { flex-shrink: 0; }
+  .progress { height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .3s; }
+  .resHead { display: flex; align-items: baseline; justify-content: space-between; }
+  .resHead b { font-size: 15px; }
+  .resHead span { font-size: 12px; font-weight: 700; color: #FCD34D; }
+  .classItem { padding: 0; }
+  .classItem .ciMain { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 4px 12px 12px; }
+  .classItem .ciEdit { color: var(--muted); margin-right: 4px; }
+  .classItem .code { max-width: 40%; overflow-wrap: anywhere; line-height: 1.2; }
+  .classItem.needs { box-shadow: inset 4px 0 0 #F59E0B; background: rgba(245,158,11,.08); }
+  .classItem em { color: #FCD34D; font-style: normal; font-weight: 700; }
+  .editor { display: flex; flex-direction: column; gap: 10px; padding: 14px 12px; background: #172635; border-bottom: 1px solid var(--line); }
+  .editor label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .editor input, .editor select { height: 44px; border-radius: 10px; border: 1px solid var(--line); background: #0D1720; color: var(--text); padding: 0 12px; width: 100%; -webkit-appearance: none; appearance: none; }
+  .editor input:focus, .editor select:focus { outline: none; border-color: var(--sky); }
+  .editor .err { font-size: 13px; color: #FECDD3; }
+  .hintSm { font-size: 12px; color: #FCD34D; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row2 .btn { width: 100%; height: 46px; font-size: 14px; }
+  .layer { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .layer:last-child { border-bottom: 0; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+  .layer span { flex: 1; }
+  .switch { position: relative; width: 50px; height: 30px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch i { position: absolute; inset: 0; border-radius: 15px; background: #34495C; transition: background .2s; }
+  .switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch input:checked + i { background: var(--sky); }
+  .switch input:checked + i::after { transform: translateX(20px); }
+  .legend { display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); background: #111D28; border-radius: 12px; padding: 12px; }
+  .legend div { display: flex; align-items: center; gap: 10px; }
+  .sq { width: 16px; height: 16px; border-radius: 4px; }
+
+  .detailImg { position: relative; height: 150px; border-radius: 16px; overflow: hidden; background: var(--card2); flex-shrink: 0; }
+  .detailImg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .detailImg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(20,33,45,.95), transparent 60%); }
+  .detailImg .cap { position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 1; }
+  .catBadge { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .6px; padding: 3px 8px; border-radius: 10px; background: rgba(0,163,224,.2); color: var(--sky); border: 1px solid rgba(0,163,224,.45); }
+  .detailImg h3 { font-size: 22px; margin-top: 4px; }
+  .box { background: #111D28; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.45; }
+  .box h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin-bottom: 4px; }
+  .box.mine { background: rgba(212,175,55,.1); border-color: rgba(212,175,55,.5); }
+  .box.mine h4 { color: var(--gold); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ===== Vistas de contenido ===== */
+  .pageTitle { font-size: 24px; font-weight: 800; line-height: 1.2; }
+  .lead { font-size: 15px; color: #C9D6E2; line-height: 1.55; }
+  .stats { display: flex; flex-direction: column; gap: 10px; }
+  .stat { display: flex; gap: 14px; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+  .stat .num { font-size: 26px; font-weight: 800; color: var(--sky); min-width: 70px; line-height: 1.1; }
+  .stat p { font-size: 14px; line-height: 1.45; }
+  .stat small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .card h3 { font-size: 17px; display: flex; align-items: center; gap: 10px; }
+  .card h3 svg { color: var(--sky); }
+  .card p { font-size: 14px; color: #C9D6E2; line-height: 1.5; }
+  .frame { width: 100%; border: 0; border-radius: 12px; background: #0D1720; display: block; }
+  .pdfFrame { height: 65vh; height: 65dvh; min-height: 380px; }
+  .video { position: relative; width: 100%; padding-top: 56.25%; border-radius: 12px; overflow: hidden; background: #0D1720; }
+  .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .pdfPages { max-height: 70vh; max-height: 70dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #2A3B4C; border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .pdfPage { width: 100%; height: auto; display: block; background: #fff; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  .vvideo { width: min(100%, 360px, calc(70vh * 9 / 16)); max-width: 360px; margin: 0 auto; aspect-ratio: 9 / 16; border-radius: 14px; overflow: hidden; background: #0D1720; }
+  .vvideo video { width: 100%; height: 100%; display: block; object-fit: contain; background: #000; }
+  .videoCap { text-align: center; font-size: 13px !important; color: var(--muted) !important; }
+  .placeholder { border: 2px dashed #34495C; border-radius: 14px; padding: 28px 16px; text-align: center; color: var(--muted); font-size: 14px; line-height: 1.5; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .placeholder svg { width: 36px; height: 36px; color: #4C6378; }
+  .formFrame { height: 75vh; height: 75dvh; min-height: 520px; background: #fff; }
+  .chipsRow { display: flex; flex-wrap: wrap; gap: 8px; }
+  .miniChip { font-size: 13px; padding: 6px 11px; border-radius: 14px; background: var(--card2); color: #C9D6E2; border: 1px solid var(--line); }
+
+  @media (min-width: 700px) {
+    .sheet { left: 50%; right: auto; width: 560px; transform: translate(-50%, 105%); }
+    .sheet.open { transform: translate(-50%, 0); }
+    .view.scroll > * { max-width: 680px; width: 100%; margin-left: auto; margin-right: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     ⚙️  CONFIGURACIÓN — LO ÚNICO QUE TIENEN QUE EDITAR
+     Peguen los enlaces entre las comillas. Si un enlace está vacío,
+     la página muestra un aviso de "Próximamente".
+     ============================================================ -->
+<script>
+  const CONFIG = {
+    // 1) PDF del marco teórico: súbanlo a Google Drive, compártanlo como
+    //    "Cualquier persona con el enlace" y peguen aquí el enlace.
+    PDF_URL: 'marco_teorico.pdf',
+
+    // 2) Video: archivo que va junto a esta página (video_intro.mp4),
+    //    o un enlace de YouTube o de Google Drive.
+    VIDEO_URL: 'video_intro.mp4',
+    VIDEO_POSTER: 'video_intro_poster.jpg',
+
+    // 3) Sugerencias: enlace de su Formulario de Google
+    //    (botón "Enviar" → ícono de enlace → copiar).
+    FORM_URL: ''
+  };
+</script>
+
+<div id="app">
+  <header class="topbar">
+    <button class="iconbtn" id="menuBtn" aria-label="Abrir menú">
+      <svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <div class="titles">
+      <h1>Mapa Interactivo</h1>
+      <p id="sectionTitle">Mapa del campus</p>
+    </div>
+    <span class="tag">UNAQ</span>
+  </header>
+
+  <main>
+    <!-- ======================= 1. MAPA ======================= -->
+    <section class="view active" id="view-mapa">
+      <div class="mapTools">
+        <div class="search">
+          <svg class="i sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="searchInput" type="text" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="Buscar salón: I011, F103, baños…" aria-label="Buscar salón">
+          <button class="iconbtn" id="clearSearch" hidden aria-label="Borrar búsqueda"><svg class="i sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="results" id="searchResults" hidden></div>
+        <div class="chips" id="sectorChips"></div>
+      </div>
+
+      <div class="mapWrap">
+        <div id="mapViewport"><div id="mapCanvas"></div></div>
+        <div class="zoomCol">
+          <button id="zoomIn" aria-label="Acercar"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button id="zoomOut" aria-label="Alejar"><svg class="i" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+          <button id="zoomReset" aria-label="Centrar mapa"><svg class="i" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+        </div>
+        <div class="mapHint" id="mapHint">Pellizca para hacer zoom · toca un salón</div>
+      </div>
+
+      <button class="toast" id="toast" hidden>
+        <span class="pin"><svg class="i" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span>
+        <span class="txt"><b id="toastTitle"></b><small id="toastSub"></small></span>
+        <span class="go">Ver</span>
+      </button>
+
+      <div class="bottombar">
+        <button class="btn gold" id="openHorario">
+          <svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+          <span>Mi horario</span><span class="badge" id="horarioBadge" hidden></span>
+        </button>
+        <button class="btn dark" id="openCapas">
+          <svg class="i" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>
+          <span>Capas</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ================ 2. ¿POR QUÉ HACEMOS ESTO? ================ -->
+    <section class="view scroll" id="view-porque">
+      <h2 class="pageTitle">¿Por qué hacemos esto?</h2>
+      <p class="lead">Encontrar un salón, una impresora o un baño no debería costar trabajo. Hicimos este mapa porque muchos alumnos, sobre todo los de nuevo ingreso, pierden tiempo buscando dónde les toca clase. En México, además, nos cuesta orientarnos con mapas.</p>
+
+      <div class="stats">
+        <div class="stat"><div class="num">85%</div><p>de los encuestados en la Universidad Autónoma de Querétaro consideró que la señalética de su campus no es eficiente.<small>Trejo Vidal y Guerrero Ramírez, 2021</small></p></div>
+        <div class="stat"><div class="num">65%</div><p>quería que el mapa mostrara una foto del lugar, no solo el nombre.<small>Trejo Vidal y Guerrero Ramírez, 2021</small></p></div>
+        <div class="stat"><div class="num">34%</div><p>de los estudiantes mexicanos alcanzó el nivel básico de matemáticas en PISA 2022 (promedio OCDE: 69%).<small>OCDE, 2023</small></p></div>
+      </div>
+
+      <div class="card">
+        <h3><svg class="i" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>Marco teórico</h3>
+        <p>Nuestra investigación completa: antecedentes, contexto y evidencias.</p>
+        <div id="pdfSlot"></div>
+      </div>
+
+      <div class="card">
+        <h3><svg class="i" viewBox="0 0 24 24"><rect x="2" y="5" width="15" height="14" rx="2"/><path d="m17 10 5-3v10l-5-3"/></svg>Video del proyecto</h3>
+        <div id="videoSlot"></div>
+      </div>
+    </section>
+
+    <!-- ===================== 3. SUGERENCIAS ===================== -->
+    <section class="view scroll" id="view-sugerencias">
+      <h2 class="pageTitle">Sugerencias</h2>
+      <p class="lead">¿Falta un salón? ¿Algo está mal ubicado? ¿Se te ocurre una mejora? Cuéntanos y lo corregimos.</p>
+      <div class="chipsRow">
+        <span class="miniChip">📍 Salón que falta</span>
+        <span class="miniChip">⚠️ Algo está mal</span>
+        <span class="miniChip">💡 Idea nueva</span>
+      </div>
+      <div class="card" style="padding:10px">
+        <div id="formSlot"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Menú lateral -->
+<div class="scrim" id="drawerScrim"></div>
+<nav id="drawer" aria-label="Menú">
+  <div class="drawerHead">
+    <div class="logo"><svg class="i" viewBox="0 0 24 24" style="color:#fff"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg></div>
+    <div><b>Mapa UNAQ</b><small>Universidad Aeronáutica en Querétaro</small></div>
+  </div>
+  <button class="navItem active" data-view="mapa">
+    <svg class="i" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>Mapa
+  </button>
+  <button class="navItem" data-view="porque">
+    <svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/></svg>¿Por qué hacemos esto?
+  </button>
+  <button class="navItem" data-view="sugerencias">
+    <svg class="i" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Sugerencias
+  </button>
+  <div class="drawerFoot">Proyecto estudiantil · UNAQ<br>Tu horario se lee solo en tu celular: no se guarda ni se envía.</div>
+</nav>
+
+<!-- Hojas inferiores -->
+<div class="scrim" id="sheetScrim"></div>
+
+<div class="sheet" id="sheet-horario" role="dialog" aria-label="Mi horario">
+  <div class="grab"></div>
+  <div class="sheetHead"><h2>Mi horario</h2><button class="iconbtn" data-close aria-label="Cerrar"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+  <div class="sheetBody">
+    <input type="file" id="scheduleFile" accept="image/*,.pdf,application/pdf,.csv,text/csv,text/comma-separated-values" hidden>
+    <div id="startBox" class="stack">
+      <label class="btn gold full" for="scheduleFile">
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <span>Subir captura, foto o PDF</span>
+      </label>
+      <button class="btn dark full" id="manualBtn">
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        <span>Escribir mis salones</span>
+      </button>
+      <ul class="tips">
+        <li>🔍 <b>Lo más importante:</b> antes de la captura, <b>gira el celular y haz zoom</b> para que la tabla se vea grande. Entre más grande la letra, mejor se lee.</li>
+        <li>📄 Si tu horario viene en <b>PDF</b>, súbelo directo: se lee sin errores.</li>
+        <li>📷 Si es foto: de frente, con buena luz y que salga solo la tabla.</li>
+        <li>✏️ Después podrás revisar, corregir o agregar clases.</li>
+        <li>🔒 Tu horario se lee solo en tu celular: no se guarda ni se envía.</li>
+      </ul>
+    </div>
+    <div id="scheduleStatus" class="status" hidden></div>
+    <div id="progressBar" class="progress" hidden><i></i></div>
+    <div id="scheduleResults" class="stack" hidden>
+      <div class="resHead"><b id="resTitle">Tus clases</b><span id="reviewCount"></span></div>
+      <div class="dayChips" id="dayChips"></div>
+      <div class="classList" id="scheduleList"></div>
+      <div class="warn" id="notFoundBox" hidden></div>
+      <div class="row2">
+        <button class="btn dark" id="addClass">+ Agregar clase</button>
+        <label class="btn dark" for="scheduleFile">Subir otro</label>
+      </div>
+      <button class="btn ghost full" id="clearSchedule">Quitar horario</button>
+    </div>
+    <details class="fmt">
+      <summary>¿Tienes tu horario en Excel? (CSV)</summary>
+      <p>Haz una tabla con estas cuatro columnas:</p>
+      <table>
+        <tr><th>dia</th><th>hora</th><th>materia</th><th>salon</th></tr>
+        <tr><td>Lunes</td><td>07:00</td><td>Cálculo</td><td>I011</td></tr>
+        <tr><td>Martes</td><td>09:00</td><td>Física</td><td>A102</td></tr>
+      </table>
+      <p>Guárdala como CSV: en Google Sheets, <b>Archivo → Descargar → Valores separados por comas (.csv)</b>; en Excel, <b>Guardar como → CSV</b>.</p>
+      <p><button class="btn ghost" id="downloadTemplate" style="margin-top:4px">Descargar plantilla</button></p>
+    </details>
+    <datalist id="roomOptions"></datalist>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-capas" role="dialog" aria-label="Capas">
+  <div class="grab"></div>
+  <div class="sheetHead"><h2>Capas del mapa</h2><button class="iconbtn" data-close aria-label="Cerrar"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+  <div class="sheetBody">
+    <div id="layerList"></div>
+    <button class="btn dark full" id="showAll">Mostrar todo</button>
+    <div class="legend">
+      <div><span class="sq" style="background:var(--gold)"></span>Salones de tu horario</div>
+      <div><span class="sq" style="background:var(--accent)"></span>Lugar seleccionado</div>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-detalle" role="dialog" aria-label="Detalle del lugar">
+  <div class="grab"></div>
+  <div class="sheetHead"><h2>Detalle</h2><button class="iconbtn" data-close aria-label="Cerrar"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+  <div class="sheetBody">
+    <div class="detailImg"><img id="dImg" alt="" onerror="this.style.visibility='hidden'" onload="this.style.visibility='visible'"><div class="cap"><span class="catBadge" id="dBadge"></span><h3 id="dTitle"></h3></div></div>
+    <div class="box mine" id="dMine" hidden><h4>Tus clases aquí</h4><div id="dMineList"></div></div>
+    <div class="box"><h4>Descripción</h4><div id="dDesc"></div></div>
+    <div class="box"><h4>Carreras / áreas</h4><div id="dFaculty"></div></div>
+    <div class="grid2">
+      <div class="box"><h4>Horario</h4><div id="dHours"></div></div>
+      <div class="box"><h4>Ubicación</h4><div id="dZone"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================== DATOS DEL CAMPUS ================== */
+    const R = (id, label, category, x, y, w, h, desc, faculty) => ({ id, label, category, x, y, w, h, desc, faculty });
+    const IMG_CAMPUS = 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=800&q=80';
+
+    const campusData = {
+      edificioA_PB: {
+        title: 'Edificio A y B - Planta Baja',
+        image: 'https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=800&q=80',
+        rooms: [
+          { id: 'A001', label: 'A001', category: 'aula', x: 80, y: 150, w: 70, h: 40, desc: 'Aula de clases teóricas', faculty: 'Ingeniería Aeronáutica / TSU' },
+          { id: 'A001-B', label: 'A001-B', category: 'aula', x: 80, y: 100, w: 70, h: 45, desc: 'Aula de clases y tutorías', faculty: 'TSU Mantenimiento' },
+          { id: 'A002', label: 'A002', category: 'aula', x: 80, y: 200, w: 70, h: 40, desc: 'Aula asignada a tronco común', faculty: 'Ingeniería en Manufactura' },
+          { id: 'A002-B', label: 'A002-B', category: 'aula', x: 80, y: 245, w: 70, h: 40, desc: 'Aula teórica', faculty: 'TSU Sistemas Aeronáuticos' },
+          { id: 'A003', label: 'A003', category: 'aula', x: 160, y: 100, w: 70, h: 45, desc: 'Aula de clases especializadas', faculty: 'Ingeniería Aeronáutica' },
+          { id: 'A003-B', label: 'A003-B', category: 'aula', x: 160, y: 150, w: 70, h: 40, desc: 'Aula de seminario', faculty: 'Todas las carreras' },
+          { id: 'A004', label: 'A004', category: 'aula', x: 160, y: 200, w: 70, h: 40, desc: 'Aula regular', faculty: 'TSU Aviónica' },
+          { id: 'A004-B', label: 'A004-B', category: 'aula', x: 160, y: 245, w: 70, h: 40, desc: 'Aula multimedia', faculty: 'Ingeniería y TSU' },
+          { id: 'SALA_MAESTROS_PB', label: 'Sala de Maestros', category: 'admin', x: 80, y: 295, w: 150, h: 50, desc: 'Oficinas de profesores de tiempo completo', faculty: 'Cuerpo Académico PB' },
+          { id: 'WC_A_PB', label: 'WC Damas/Caballeros', category: 'wc', x: 80, y: 60, w: 150, h: 35, desc: 'Módulos sanitarios Edificio A PB', faculty: 'Servicios Básicos' },
+          { id: 'B001', label: 'B001', category: 'aula', x: 380, y: 220, w: 80, h: 60, desc: 'Laboratorio de pruebas básicas', faculty: 'Ingeniería en Manufactura' },
+          { id: 'B002', label: 'B002', category: 'aula', x: 470, y: 220, w: 80, h: 60, desc: 'Aula de clases prácticas', faculty: 'Ingeniería Aeronáutica' },
+          { id: 'B003', label: 'B003', category: 'aula', x: 470, y: 150, w: 80, h: 60, desc: 'Aula Edificio B', faculty: 'TSU' },
+          { id: 'B004', label: 'B004', category: 'aula', x: 380, y: 150, w: 80, h: 60, desc: 'Aula teórica', faculty: 'TSU' },
+          { id: 'MESAS_ROJAS', label: 'Mesas Rojas (Ingeniería)', category: 'admin', x: 250, y: 290, w: 120, h: 65, desc: 'Área de estudio, trabajo colaborativo y descanso', faculty: 'Comunidad Estudiantil' },
+          { id: 'WC_B_PB', label: 'WC Edificio B', category: 'wc', x: 430, y: 110, w: 120, h: 35, desc: 'Sanitarios Edificio B', faculty: 'Servicios Básicos' }
+        ],
+        pins: [
+          { id: 'pin-A-PB', title: 'Edificio A - PB', category: 'aula', x: 155, y: 180, desc: 'Aulas A001 a A004 y Sala de Maestros.', hours: '07:00 - 20:00 hrs', faculty: 'Ingeniería y TSU' },
+          { id: 'pin-B-PB', title: 'Edificio B - PB', category: 'aula', x: 450, y: 200, desc: 'Módulos B001 a B004 y Mesas Rojas de Ingeniería.', hours: '07:00 - 19:30 hrs', faculty: 'Ingeniería' }
+        ]
+      },
+
+      edificioA_P1: {
+        title: 'Edificio A y B - Primer Piso',
+        image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=800&q=80',
+        rooms: [
+          { id: 'A101', label: 'A101', category: 'aula', x: 80, y: 120, w: 70, h: 40, desc: 'Aula de clases teóricas primer piso', faculty: 'Ingeniería Aeronáutica' },
+          { id: 'A101-B', label: 'A101-B', category: 'aula', x: 80, y: 75, w: 70, h: 40, desc: 'Aula de clases', faculty: 'TSU' },
+          { id: 'A102', label: 'A102', category: 'aula', x: 80, y: 165, w: 70, h: 40, desc: 'Aula regular primer piso', faculty: 'Ingeniería Aeronáutica' },
+          { id: 'A102-B', label: 'A102-B', category: 'aula', x: 80, y: 210, w: 70, h: 40, desc: 'Aula teórica', faculty: 'TSU' },
+          { id: 'A104', label: 'A104', category: 'aula', x: 160, y: 120, w: 70, h: 40, desc: 'Aula multimedios primer piso', faculty: 'TSU' },
+          { id: 'A104-B', label: 'A104-B', category: 'aula', x: 160, y: 75, w: 70, h: 40, desc: 'Aula de conferencias', faculty: 'Todas las carreras' },
+          { id: 'A105', label: 'A105', category: 'aula', x: 160, y: 165, w: 70, h: 40, desc: 'Aula de clases', faculty: 'Ingeniería' },
+          { id: 'A105-B', label: 'A105-B', category: 'aula', x: 160, y: 210, w: 70, h: 40, desc: 'Aula regular', faculty: 'TSU' },
+          { id: 'A106', label: 'A106', category: 'aula', x: 115, y: 260, w: 55, h: 40, desc: 'Aula especial de posgrado/ing', faculty: 'Ingeniería' },
+          { id: 'A106-B', label: 'A106-B', category: 'aula', x: 175, y: 260, w: 55, h: 40, desc: 'Aula de cómputo/diseño', faculty: 'Ingeniería' },
+          { id: 'A103', label: 'Sala de Maestros (A103)', category: 'admin', x: 50, y: 260, w: 60, h: 40, desc: 'Oficinas docentes A103', faculty: 'Cuerpo Académico' },
+          { id: 'WC_H_A1', label: 'WC-H', category: 'wc', x: 80, y: 30, w: 70, h: 38, desc: 'Baños de hombres, Edificio A primer piso', faculty: 'Servicios Básicos' },
+          { id: 'WC_M_A1', label: 'WC-M', category: 'wc', x: 160, y: 30, w: 70, h: 38, desc: 'Baños de mujeres, Edificio A primer piso', faculty: 'Servicios Básicos' },
+          { id: 'WC_B_P1', label: 'WC Edificio B', category: 'wc', x: 420, y: 60, w: 120, h: 35, desc: 'Sanitarios Edificio B primer piso', faculty: 'Servicios Básicos' },
+          { id: 'LAB_QUIMICA', label: 'Laboratorio Química', category: 'lab', x: 420, y: 100, w: 120, h: 60, desc: 'Laboratorio equipado para prácticas de Química y Materiales', faculty: 'Ingeniería / TSU' },
+          { id: 'LAB_FISICA', label: 'Laboratorio Física', category: 'lab', x: 420, y: 165, w: 120, h: 65, desc: 'Prácticas de física, mecánica y termodinámica', faculty: 'Ingeniería Aeronáutica' },
+          { id: 'LAB_SIMULACION', label: 'Laboratorio Simulación', category: 'lab', x: 420, y: 235, w: 120, h: 50, desc: 'Software de simulación numérica y dinámica de fluidos', faculty: 'Ingeniería / Posgrado' },
+          { id: 'CENTRO_INFO_B', label: 'Centro de Información B', category: 'admin', x: 260, y: 240, w: 130, h: 60, desc: 'Biblioteca, áreas de lectura y consulta digital', faculty: 'Comunidad UNAQ' },
+          { id: 'IMPRESORA_CIB', label: '🖨', category: 'print', x: 362, y: 262, w: 22, h: 22, desc: 'Impresora - Centro de Información B (primer piso)', faculty: 'Servicio para estudiantes' }
+        ],
+        pins: [
+          { id: 'pin-LABS-B', title: 'Edificio B - Laboratorios', category: 'lab', x: 480, y: 150, desc: 'Laboratorios especializados de Química, Física y Simulación aeronáutica.', hours: '08:00 - 18:00 hrs', faculty: 'Facultad de Ingeniería' },
+          { id: 'pin-CIB', title: 'Centro de Información B', category: 'admin', x: 300, y: 270, desc: 'Biblioteca y área de consulta del Edificio B, con impresora disponible.', hours: '08:00 - 18:00 hrs', faculty: 'Comunidad UNAQ' }
+        ]
+      },
+
+      edificioA_P2: {
+        title: 'Edificio A y B - Segundo Piso',
+        image: 'https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=800&q=80',
+        rooms: [
+          { id: 'A201', label: 'A201', category: 'aula', x: 80, y: 110, w: 70, h: 40, desc: 'Aula teórica nivel 2', faculty: 'Ingeniería en Manufactura' },
+          { id: 'A201-B', label: 'A201-B', category: 'aula', x: 80, y: 65, w: 70, h: 40, desc: 'Aula de clase', faculty: 'TSU' },
+          { id: 'A202', label: 'A202', category: 'aula', x: 80, y: 155, w: 70, h: 40, desc: 'Aula regular', faculty: 'Ingeniería Aeronáutica' },
+          { id: 'A202-B', label: 'A202-B', category: 'aula', x: 80, y: 200, w: 70, h: 40, desc: 'Aula teórica', faculty: 'TSU' },
+          { id: 'A203', label: 'A203', category: 'aula', x: 80, y: 245, w: 70, h: 45, desc: 'Aula magna de segundo nivel', faculty: 'Ingeniería / Posgrado' },
+          { id: 'A204', label: 'A204', category: 'aula', x: 160, y: 110, w: 70, h: 40, desc: 'Aula de alto rendimiento', faculty: 'Ingeniería' },
+          { id: 'A204-B', label: 'A204-B', category: 'aula', x: 160, y: 65, w: 70, h: 40, desc: 'Aula multimedia', faculty: 'TSU' },
+          { id: 'A205', label: 'A205', category: 'aula', x: 160, y: 155, w: 70, h: 40, desc: 'Aula teórica', faculty: 'Ingeniería' },
+          { id: 'A205-B', label: 'A205-B', category: 'aula', x: 160, y: 200, w: 70, h: 40, desc: 'Aula regular', faculty: 'TSU' },
+          { id: 'A206', label: 'A206', category: 'aula', x: 160, y: 245, w: 35, h: 45, desc: 'Aula de especialidad', faculty: 'Ingeniería' },
+          { id: 'A206-B', label: 'A206-B', category: 'aula', x: 198, y: 245, w: 35, h: 45, desc: 'Aula de especialidad B', faculty: 'Ingeniería' },
+          { id: 'WC_H_A2', label: 'WC-H', category: 'wc', x: 80, y: 22, w: 70, h: 38, desc: 'Baños de hombres, Edificio A segundo piso', faculty: 'Servicios Básicos' },
+          { id: 'WC_M_A2', label: 'WC-M', category: 'wc', x: 160, y: 22, w: 70, h: 38, desc: 'Baños de mujeres, Edificio A segundo piso', faculty: 'Servicios Básicos' },
+          { id: 'WC_B_P2', label: 'WC Edificio B', category: 'wc', x: 450, y: 105, w: 90, h: 38, desc: 'Sanitarios Edificio B segundo piso', faculty: 'Servicios Básicos' },
+          { id: 'LAB_IDIOMAS', label: 'Laboratorio Idiomas', category: 'lab', x: 260, y: 250, w: 75, h: 50, desc: 'Centro de idiomas equipado con software interactivo de escucha', faculty: 'Coordinación de Idiomas' },
+          { id: 'LAB_AUTOACCESO', label: 'Laboratorio Autoacceso', category: 'lab', x: 340, y: 250, w: 75, h: 50, desc: 'Centro de aprendizaje autónomo de inglés y francés', faculty: 'Comunidad UNAQ' },
+          { id: 'AUDITORIO', label: 'Auditorio UNAQ', category: 'admin', x: 450, y: 150, w: 90, h: 140, desc: 'Auditorio principal para simposios, congresos y ceremonias de graduación', faculty: 'Toda la Universidad' }
+        ],
+        pins: [
+          { id: 'pin-AUDITORIO', title: 'Auditorio UNAQ', category: 'admin', x: 495, y: 220, desc: 'Auditorio Institucional para magnos eventos aeronáuticos.', hours: 'Eventos Especiales', faculty: 'Institucional' },
+          { id: 'pin-IDIOMAS', title: 'Laboratorio de Idiomas', category: 'lab', x: 300, y: 275, desc: 'Aulas de entrenamiento de Inglés Técnico e Idioma Francés.', hours: '08:00 - 17:00 hrs', faculty: 'Centro de Idiomas' }
+        ]
+      },
+
+      principal: {
+        title: 'Campus Principal - Salones I · C · F, Lobby y Servicios',
+        viewBox: '0 0 600 900',
+        image: IMG_CAMPUS,
+        rooms: [
+          R('F006', 'F006', 'aula', 40, 20, 60, 36, 'Aula F006', 'Ingeniería / TSU'),
+          R('F005', 'F005', 'aula', 40, 58, 60, 36, 'Aula F005', 'Ingeniería / TSU'),
+          R('F003', 'F003', 'aula', 40, 96, 60, 36, 'Aula F003', 'Ingeniería / TSU'),
+          R('F101', 'F101', 'aula', 40, 134, 60, 36, 'Aula F101 (primer piso)', 'Ingeniería / TSU'),
+          R('F102', 'F102', 'aula', 40, 172, 60, 36, 'Aula F102 (primer piso)', 'Ingeniería / TSU'),
+          R('F103', 'F103', 'aula', 40, 210, 60, 36, 'Aula F103 (primer piso)', 'Ingeniería / TSU'),
+          R('F104', 'F104', 'aula', 40, 248, 60, 36, 'Aula F104 (primer piso)', 'Ingeniería / TSU'),
+          R('MILITARES', 'Militares', 'admin', 40, 288, 60, 55, 'Oficina de Militares', 'Administración'),
+          R('GYM', 'GYM', 'admin', 40, 347, 60, 50, 'Gimnasio universitario y acondicionamiento físico', 'Deportes UNAQ'),
+          R('SALON_BAILE', 'Salón de Baile', 'admin', 40, 401, 60, 45, 'Salón de actividades culturales y danza', 'Difusión Cultural'),
+          R('BECAS', 'Becas', 'admin', 40, 450, 60, 40, 'Oficina de Becas', 'Servicios Estudiantiles'),
+          R('POSGRADO', 'Posgrado', 'aula', 105, 20, 55, 110, 'Edificio de Posgrado (conectado a F)', 'Posgrado'),
+          R('F201', 'F201', 'aula', 105, 140, 55, 30, 'Aula F201 (2° piso)', 'Ingeniería'),
+          R('F202', 'F202', 'aula', 105, 172, 55, 30, 'Aula F202 (2° piso)', 'Ingeniería'),
+          R('F203', 'F203', 'aula', 105, 204, 55, 30, 'Aula F203 (2° piso)', 'Ingeniería'),
+          R('F301', 'F301', 'aula', 165, 20, 42, 24, 'Aula F301 (3° piso)', 'Ingeniería'),
+          R('F302', 'F302', 'aula', 165, 46, 42, 24, 'Aula F302 (3° piso)', 'Ingeniería'),
+          R('F303', 'F303', 'aula', 165, 72, 42, 24, 'Aula F303 (3° piso)', 'Ingeniería'),
+          R('F304', 'F304', 'aula', 165, 98, 42, 24, 'Aula F304 (3° piso)', 'Ingeniería'),
+          R('F305', 'F305', 'aula', 165, 124, 42, 24, 'Aula F305 (3° piso)', 'Ingeniería'),
+          R('F306', 'F306', 'aula', 165, 156, 42, 24, 'Aula F306 (3° piso)', 'Ingeniería'),
+          R('F307', 'F307', 'aula', 165, 182, 42, 24, 'Aula F307 (3° piso)', 'Ingeniería'),
+          R('F308', 'F308', 'aula', 165, 208, 42, 24, 'Aula F308 (3° piso)', 'Ingeniería'),
+          R('C004', 'C004', 'aula', 105, 350, 55, 30, 'Aula C004', 'Ingeniería / TSU'),
+          R('C003', 'C003', 'aula', 105, 382, 55, 30, 'Aula C003', 'Ingeniería / TSU'),
+          R('C002', 'C002', 'aula', 105, 414, 55, 30, 'Aula C002', 'Ingeniería / TSU'),
+          R('C001', 'C001', 'aula', 105, 446, 55, 30, 'Aula C001', 'Ingeniería / TSU'),
+          R('SCIV', 'SCIV', 'admin', 105, 480, 55, 40, 'Oficina SCIV', 'Administración'),
+          R('J004', 'J004', 'lab', 260, 20, 50, 30, 'Laboratorio J004', 'Ingeniería'),
+          R('J003', 'J003', 'lab', 312, 20, 50, 30, 'Laboratorio J003', 'Ingeniería'),
+          R('J002', 'J002', 'lab', 260, 52, 50, 30, 'Laboratorio J002', 'Ingeniería'),
+          R('J001', 'J001', 'lab', 364, 20, 32, 62, 'Laboratorio J001', 'Ingeniería'),
+          R('H101', 'H101', 'aula', 440, 20, 50, 70, 'Aula H101', 'Ingeniería / TSU'),
+          R('H102', 'H102', 'aula', 440, 92, 25, 40, 'Aula H102', 'Ingeniería / TSU'),
+          R('H103', 'H103', 'aula', 467, 92, 25, 40, 'Aula H103', 'Ingeniería / TSU'),
+          R('H204', 'H204', 'aula', 505, 20, 40, 28, 'Aula H204 (2° piso)', 'Ingeniería'),
+          R('H203', 'H203', 'aula', 548, 20, 40, 28, 'Aula H203 (2° piso)', 'Ingeniería'),
+          R('H202', 'H202', 'aula', 505, 50, 40, 28, 'Aula H202 (2° piso)', 'Ingeniería'),
+          R('H201', 'H201', 'aula', 548, 50, 40, 28, 'Aula H201 (2° piso)', 'Ingeniería'),
+          R('MATERIALES_COMP', 'Materiales Compuestos', 'lab', 430, 150, 90, 110, 'Taller de manufactura de materiales compuestos', 'Ingeniería en Manufactura'),
+          R('WC_MATERIALES', 'Baños', 'wc', 525, 265, 50, 25, 'Baños junto a Materiales Compuestos', 'Servicios Básicos'),
+          R('CUARTO_LIMPIO', 'Cuarto Limpio', 'lab', 430, 300, 80, 40, 'Área limpia controlada', 'Investigación / Posgrado'),
+          R('ALMACEN', 'Almacén', 'admin', 430, 345, 80, 60, 'Almacén general', 'Servicios Generales'),
+          R('SERV_MEDICO_P', 'Serv. Médico', 'admin', 430, 410, 80, 40, 'Servicio médico del campus', 'Servicios Estudiantiles'),
+          R('IMPRESORA_PRINCIPAL', '🖨', 'print', 405, 395, 22, 22, 'Impresora - pasillo entre salones I y Almacén / Servicio Médico', 'Servicio para estudiantes'),
+          R('I017', 'I017', 'aula', 255, 300, 55, 36, 'Aula I017', 'Ingeniería / TSU'),
+          R('I016', 'I016', 'aula', 312, 300, 55, 36, 'Aula I016', 'Ingeniería / TSU'),
+          R('I020', 'I020', 'aula', 255, 338, 55, 36, 'Aula I020', 'Ingeniería / TSU'),
+          R('I015', 'I015', 'aula', 312, 338, 55, 36, 'Aula I015', 'Ingeniería / TSU'),
+          R('I021', 'I021', 'aula', 255, 376, 55, 36, 'Aula I021', 'Ingeniería / TSU'),
+          R('I014', 'I014', 'aula', 312, 376, 55, 36, 'Aula I014', 'Ingeniería / TSU'),
+          R('CAS', 'CAS', 'admin', 255, 414, 112, 36, 'Centro de Atención y Servicios (CAS)', 'Servicios Estudiantiles'),
+          R('PSICOPEDAGOGIA', 'Psicopedagogía', 'admin', 255, 452, 55, 38, 'Atención psicopedagógica', 'Servicios Estudiantiles'),
+          R('I013', 'I013', 'aula', 312, 452, 55, 38, 'Aula I013', 'Ingeniería / TSU'),
+          R('I011', 'I011', 'aula', 255, 492, 55, 38, 'Aula I011', 'Ingeniería / TSU'),
+          R('I012', 'I012', 'aula', 312, 492, 55, 38, 'Aula I012', 'Ingeniería / TSU'),
+          R('I009', 'I009', 'aula', 255, 545, 55, 36, 'Aula I009', 'Ingeniería / TSU'),
+          R('I010', 'I010', 'aula', 312, 545, 55, 36, 'Aula I010', 'Ingeniería / TSU'),
+          R('I007', 'I007', 'aula', 255, 583, 55, 36, 'Aula I007', 'Ingeniería / TSU'),
+          R('I008', 'I008', 'aula', 312, 583, 55, 36, 'Aula I008', 'Ingeniería / TSU'),
+          R('I005', 'I005', 'aula', 255, 621, 55, 36, 'Aula I005', 'Ingeniería / TSU'),
+          R('I006', 'I006', 'aula', 312, 621, 55, 36, 'Aula I006', 'Ingeniería / TSU'),
+          R('I018', 'I018', 'aula', 430, 545, 40, 50, 'Aula I018', 'Ingeniería / TSU'),
+          R('I019', 'I019', 'aula', 472, 545, 40, 50, 'Aula I019', 'Ingeniería / TSU'),
+          R('LOBBY_P', 'LOBBY', 'admin', 255, 675, 200, 55, 'Lobby principal del campus', 'Atención General'),
+          R('SERV_ESCOLARES', 'Serv. Escolares', 'admin', 105, 695, 75, 38, 'Trámites de credenciales, titulación y constancias', 'Administración'),
+          R('CAJA', 'Caja', 'admin', 185, 705, 50, 30, 'Pagos y cobranza', 'Administración'),
+          R('CENTRO_INFO', 'Centro de Información', 'admin', 190, 745, 100, 45, 'Biblioteca y centro de información (planta baja)', 'Comunidad UNAQ'),
+          R('I001', 'I001', 'aula', 295, 745, 45, 25, 'Aula I001', 'Ingeniería / TSU'),
+          R('I002', 'I002', 'aula', 295, 772, 45, 25, 'Aula I002', 'Ingeniería / TSU'),
+          R('PLM1', 'PLM 1', 'lab', 345, 745, 42, 45, 'Laboratorio PLM 1', 'Ingeniería'),
+          R('MAQUINADOS', 'Maquinados', 'hangar', 390, 745, 100, 45, 'Taller de maquinados', 'Ingeniería en Manufactura'),
+          R('DRONE_BOX', 'Drone Box', 'hangar', 495, 745, 85, 40, 'Área de pruebas de drones', 'Ingeniería'),
+          R('WC_CAJEROS', 'Baños', 'wc', 505, 695, 35, 30, 'Baños junto a cajeros', 'Servicios Básicos'),
+          R('CAJEROS', 'Cajeros', 'admin', 545, 695, 45, 30, 'Cajeros automáticos', 'Servicios'),
+          R('SERV_GENERALES', 'Serv. Generales', 'admin', 390, 795, 90, 35, 'Servicios Generales', 'Administración'),
+          R('RECTORIA', 'Rectoría', 'admin', 340, 835, 90, 35, 'Oficina de Rectoría', 'Dirección'),
+          R('SEC_ACADEMICA', 'Sec. Académica / Tutorías', 'admin', 485, 795, 100, 40, 'Secretaría Académica y Coordinación de Tutorías', 'Dirección Académica'),
+          R('LEGALIDAD', 'Legalidad (AFAC)', 'admin', 200, 800, 100, 30, 'Legalidad y licencias AFAC', 'Administración'),
+          R('INNOVACION_TI', 'Innovación y TI', 'admin', 170, 845, 100, 30, 'Innovación y Tecnologías de la Información', 'Administración'),
+          R('INTERNACIONAL', 'Internacionalización / Vinculación', 'admin', 440, 845, 140, 30, 'Internacionalización y Vinculación Empresarial', 'Administración')
+        ],
+        pins: [
+          { id: 'pin-IMP-PRINCIPAL', title: 'Impresora (Almacén / Serv. Médico)', category: 'print', x: 416, y: 380, desc: 'Impresora ubicada en el pasillo entre los salones I y el Almacén / Servicio Médico.', hours: 'Horario de clases', faculty: 'Servicio para estudiantes' },
+          { id: 'pin-I-BLOQUE', title: 'Salones I001 - I021', category: 'aula', x: 311, y: 480, desc: 'Bloque de salones I frente al Lobby, junto con CAS y Psicopedagogía.', hours: '07:00 - 20:00 hrs', faculty: 'Ingeniería y TSU' },
+          { id: 'pin-C-BLOQUE', title: 'Salones C001 - C004', category: 'aula', x: 132, y: 415, desc: 'Salones C junto al Gimnasio y SCIV.', hours: '07:00 - 20:00 hrs', faculty: 'Ingeniería y TSU' },
+          { id: 'pin-F-BLOQUE', title: 'Salones F', category: 'aula', x: 70, y: 180, desc: 'Columna de salones F (planta baja y pisos superiores) y Posgrado.', hours: '07:00 - 20:00 hrs', faculty: 'Ingeniería / Posgrado' },
+          { id: 'pin-WC-MAT', title: 'Baños (Materiales Compuestos)', category: 'wc', x: 550, y: 278, desc: 'Baños junto al Lab. de Materiales Compuestos.', hours: '07:00 - 20:00 hrs', faculty: 'Servicios Básicos' },
+          { id: 'pin-WC-CAJ', title: 'Baños (Cajeros)', category: 'wc', x: 522, y: 710, desc: 'Baños junto a los cajeros, zona de Rectoría.', hours: '07:00 - 20:00 hrs', faculty: 'Servicios Básicos' },
+          { id: 'pin-CENTRO-INFO', title: 'Centro de Información', category: 'admin', x: 240, y: 768, desc: 'Biblioteca y centro de información cerca de Servicios Escolares.', hours: '08:00 - 18:00 hrs', faculty: 'Comunidad UNAQ' }
+        ]
+      },
+
+      cfm: {
+        title: 'Campus Franco Mexicano (CFM) & Servicios',
+        image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80',
+        rooms: [
+          { id: 'CFM_MAIN', label: 'CFM - Campus Franco Mexicano', category: 'hangar', x: 200, y: 60, w: 200, h: 110, desc: 'Centro Franco-Mexicano para la Formación en Mantenimiento Aeronáutico', faculty: 'Mantenimiento Aeronáutico CFM' },
+          { id: 'E104', label: 'E104', category: 'aula', x: 130, y: 60, w: 60, h: 30, desc: 'Aula del CFM', faculty: 'CFM / TSU' },
+          { id: 'E105', label: 'E105', category: 'aula', x: 200, y: 25, w: 45, h: 30, desc: 'Aula CFM', faculty: 'CFM' },
+          { id: 'E106', label: 'E106', category: 'aula', x: 250, y: 25, w: 45, h: 30, desc: 'Aula CFM', faculty: 'CFM' },
+          { id: 'E107', label: 'E107', category: 'aula', x: 300, y: 25, w: 45, h: 30, desc: 'Aula CFM', faculty: 'CFM' },
+          { id: 'E108', label: 'E108', category: 'aula', x: 350, y: 25, w: 45, h: 30, desc: 'Aula CFM', faculty: 'CFM' },
+          { id: 'E204', label: 'E204', category: 'aula', x: 130, y: 10, w: 60, h: 25, desc: 'Aula Nivel 2 CFM', faculty: 'CFM' },
+          { id: 'E205', label: 'E205', category: 'aula', x: 200, y: 0, w: 60, h: 20, desc: 'Aula Nivel 2 CFM', faculty: 'CFM' },
+          { id: 'J001', label: 'J001', category: 'lab', x: 320, y: 180, w: 35, h: 35, desc: 'Laboratorio especializado J001', faculty: 'Ingeniería' },
+          { id: 'J002', label: 'J002', category: 'lab', x: 240, y: 200, w: 75, h: 25, desc: 'Laboratorio especializado J002', faculty: 'Ingeniería' },
+          { id: 'J003', label: 'J003', category: 'lab', x: 280, y: 180, w: 35, h: 20, desc: 'Laboratorio J003', faculty: 'Ingeniería' },
+          { id: 'J004', label: 'J004', category: 'lab', x: 240, y: 180, w: 35, h: 20, desc: 'Laboratorio J004', faculty: 'Ingeniería' },
+          { id: 'MATERIALES_COMPUESTOS', label: 'Materiales Compuestos', category: 'lab', x: 380, y: 240, w: 80, h: 70, desc: 'Taller especializado en manufactura de materiales compuestos avanzados para aviación', faculty: 'Ingeniería en Manufactura' },
+          { id: 'CUARTO_LIMPIO_CFM', label: 'Cuarto Limpio', category: 'lab', x: 380, y: 320, w: 80, h: 35, desc: 'Área limpia controlada para ensambles sensibles de aviónica', faculty: 'Investigación / Posgrado' },
+          { id: 'GYM_CFM', label: 'Gimnasio', category: 'admin', x: 140, y: 350, w: 45, h: 40, desc: 'Gimnasio universitario y acondicionamiento físico', faculty: 'Deportes UNAQ' },
+          { id: 'SALON_BAILE_CFM', label: 'Salón Baile', category: 'admin', x: 140, y: 395, w: 45, h: 35, desc: 'Salón de actividades culturales y danza', faculty: 'Difusión Cultural' },
+          { id: 'SERV_MEDICO', label: 'Servicio Médico', category: 'admin', x: 380, y: 400, w: 80, h: 35, desc: 'Enfermería y atención médica de urgencias del campus', faculty: 'Servicios Estudiantiles' },
+          { id: 'LOBBY', label: 'LOBBY PRINCIPAL', category: 'admin', x: 250, y: 450, w: 120, h: 60, desc: 'Lobby principal y accesos a Servicios Escolares y Cajas', faculty: 'Atención General' },
+          { id: 'SERVICIOS_ESCOLARES', label: 'Servicios Escolares', category: 'admin', x: 180, y: 500, w: 65, h: 40, desc: 'Trámites de credenciales, titulación y constancias', faculty: 'Administración' },
+          { id: 'WC_CFM', label: 'Baños', category: 'wc', x: 470, y: 330, w: 40, h: 25, desc: 'Baños junto a Materiales Compuestos y Cuarto Limpio', faculty: 'Servicios Básicos' },
+          { id: 'IMPRESORA_CFM', label: '🖨', category: 'print', x: 360, y: 410, w: 18, h: 18, desc: 'Impresora - junto a Almacén / Servicio Médico', faculty: 'Servicio para estudiantes' }
+        ],
+        pins: [
+          { id: 'pin-CFM', title: 'Campus Franco Mexicano', category: 'hangar', x: 300, y: 115, desc: 'Instalaciones de primer nivel con maquetas de aviones reales y motores turbofan.', hours: '07:00 - 18:00 hrs', faculty: 'CFM / UNAQ' },
+          { id: 'pin-COMPUESTOS', title: 'Lab. Materiales Compuestos', category: 'lab', x: 420, y: 275, desc: 'Laboratorio único con autoclaves e infusión de resinas.', hours: '08:00 - 19:00 hrs', faculty: 'Ingeniería Aeronáutica' }
+        ]
+      },
+
+      hangar: {
+        title: 'Hangar Principal & Talleres de Pintura',
+        image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=800&q=80',
+        rooms: [
+          { id: 'HANGAR_MAIN', label: 'HANGAR DE AERONAVES', category: 'hangar', x: 100, y: 150, w: 260, h: 260, desc: 'Hangar con aeronaves reales (Learjet, Boeing, Helicópteros) para prácticas de mantenimiento', faculty: 'Mantenimiento Aeronáutico / TSU' },
+          { id: 'G103', label: 'G103', category: 'aula', x: 200, y: 100, w: 50, h: 40, desc: 'Aula de mantenimiento en Hangar', faculty: 'TSU' },
+          { id: 'G105', label: 'G105', category: 'aula', x: 310, y: 100, w: 50, h: 40, desc: 'Aula/Taller G105', faculty: 'TSU' },
+          { id: 'G106', label: 'G106', category: 'aula', x: 310, y: 150, w: 50, h: 35, desc: 'Aula Hangar G106', faculty: 'TSU' },
+          { id: 'G107', label: 'G107', category: 'aula', x: 310, y: 190, w: 50, h: 35, desc: 'Aula Hangar G107', faculty: 'TSU' },
+          { id: 'G108', label: 'G108', category: 'aula', x: 310, y: 230, w: 50, h: 50, desc: 'Taller de Ensamble G108', faculty: 'TSU' },
+          { id: 'G109', label: 'G109', category: 'aula', x: 310, y: 285, w: 50, h: 60, desc: 'Taller Estructural G109', faculty: 'TSU / Ingeniería' },
+          { id: 'PINTURA', label: 'Cabina de Pintura', category: 'hangar', x: 310, y: 350, w: 50, h: 45, desc: 'Cabina de pintura aeronáutica con extracción industrial', faculty: 'TSU Mantenimiento' },
+          { id: 'G201', label: 'G201 (Subdirección Tecnológica)', category: 'admin', x: 260, y: 30, w: 100, h: 50, desc: 'Oficinas de la Subdirección de Divisiones Tecnológicas', faculty: 'Dirección Académica' },
+          { id: 'WC_HANGAR', label: 'Baños Hangar', category: 'wc', x: 100, y: 100, w: 40, h: 40, desc: 'Servicios sanitarios de área de Hangar', faculty: 'Servicios' }
+        ],
+        pins: [
+          { id: 'pin-HANGAR', title: 'Hangar Aeronáutico Principal', category: 'hangar', x: 230, y: 280, desc: 'Espacio de entrenamiento con aviones y helicópteros en condiciones operativas.', hours: '07:00 - 20:00 hrs', faculty: 'Mantenimiento Aeronáutico' }
+        ]
+      },
+
+      edificioD: {
+        title: 'Edificio D - Cafetería & Aulas TSU',
+        image: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80',
+        rooms: [
+          { id: 'CAFETERIA_TSU', label: 'CAFETERÍA TSU', category: 'cafe', x: 100, y: 180, w: 380, h: 100, desc: 'Cafetería principal del área TSU con venta de alimentos, snacks y bebidas', faculty: 'Comunidad Universitaria' },
+          { id: 'D001', label: 'D001', category: 'aula', x: 420, y: 120, w: 60, h: 45, desc: 'Aula D001 Edificio D', faculty: 'TSU' },
+          { id: 'D002', label: 'D002', category: 'aula', x: 355, y: 120, w: 60, h: 45, desc: 'Aula D002', faculty: 'TSU' },
+          { id: 'D003', label: 'D003', category: 'aula', x: 290, y: 120, w: 60, h: 45, desc: 'Aula D003', faculty: 'TSU' },
+          { id: 'D004', label: 'D004', category: 'aula', x: 225, y: 120, w: 60, h: 45, desc: 'Aula D004', faculty: 'TSU' },
+          { id: 'D005', label: 'D005', category: 'aula', x: 160, y: 120, w: 60, h: 45, desc: 'Aula D005', faculty: 'TSU' },
+          { id: 'D006', label: 'D006', category: 'aula', x: 95, y: 120, w: 60, h: 45, desc: 'Aula D006', faculty: 'TSU' },
+          { id: 'D007', label: 'D007', category: 'aula', x: 225, y: 60, w: 60, h: 45, desc: 'Aula D007', faculty: 'TSU' },
+          { id: 'D008', label: 'D008', category: 'aula', x: 160, y: 60, w: 60, h: 45, desc: 'Aula D008', faculty: 'TSU' },
+          { id: 'WC_D', label: 'Baños Edificio D', category: 'wc', x: 95, y: 60, w: 60, h: 45, desc: 'Módulos sanitarios del Edificio D', faculty: 'Servicios' }
+        ],
+        pins: [
+          { id: 'pin-CAFETERIA', title: 'Cafetería TSU - Edificio D', category: 'cafe', x: 290, y: 230, desc: 'Servicio de alimentos calientes, desayunos y área de comensales.', hours: '07:30 - 18:30 hrs', faculty: 'Servicios Generales' }
+        ]
+      },
+
+      creiir: {
+        title: 'CREIIR - junto al Edificio B de Ingeniería',
+        image: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?auto=format&fit=crop&w=800&q=80',
+        rooms: [
+          { id: 'CREIIR_MAIN', label: 'CREIIR', category: 'creiir', x: 170, y: 90, w: 260, h: 90, desc: 'Sector CREIIR, ubicado al lado norte del Edificio B de Ingeniería. (Edita esta descripción con la información oficial del centro).', faculty: 'CREIIR / UNAQ' },
+          { id: 'ING_B_REF', label: 'Ingeniería B', category: 'creiir', x: 150, y: 200, w: 280, h: 110, desc: 'Edificio B de Ingeniería (referencia). Ver detalles de aulas y laboratorios en los planos A/B.', faculty: 'Ingeniería' },
+          { id: 'ING_A_REF', label: 'Ingeniería A', category: 'creiir', x: 100, y: 330, w: 340, h: 90, desc: 'Edificio A de Ingeniería (referencia). Ver detalles de aulas en los planos A/B.', faculty: 'Ingeniería' },
+          { id: 'SERV_MEDICO_ING', label: '✚ Serv. Médico', category: 'admin', x: 240, y: 430, w: 80, h: 28, desc: 'Servicio médico ubicado al frente del Edificio A de Ingeniería', faculty: 'Servicios Estudiantiles' },
+          { id: 'ACCESO_2', label: 'ACCESO 2', category: 'admin', x: 470, y: 440, w: 80, h: 28, desc: 'Acceso 2 del campus, sobre el canal / avenida lateral', faculty: 'Seguridad' }
+        ],
+        pins: [
+          { id: 'pin-CREIIR', title: 'CREIIR', category: 'creiir', x: 300, y: 135, desc: 'Sector CREIIR junto al Edificio B de Ingeniería. (Edita esta descripción con la información oficial del centro).', hours: 'Por confirmar', faculty: 'CREIIR / UNAQ' }
+        ]
+      }
+    };
+
+/* ============ LECTURA DEL HORARIO (CSV y foto) ============ */
+    const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const DAY_SHORT = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    let scheduleEntries = [];   // { day, time, subject, roomId, buildingKey }
+    let selectedDay = 'all';    // 'all' o 0..5
+
+    // Índice de todos los salones del mapa: clave -> [{ buildingKey, room }]
+    const roomIndex = {};
+    Object.keys(campusData).forEach(bKey => {
+      campusData[bKey].rooms.forEach(room => {
+        (roomIndex[room.id] = roomIndex[room.id] || []).push({ buildingKey: bKey, room });
+      });
+    });
+
+    // Lugares que no tienen clave tipo "I011": se reconocen por nombre
+    const PLACE_KEYWORDS = [
+      ['MATERIALES COMPUESTOS', 'MATERIALES_COMP'], ['CUARTO LIMPIO', 'CUARTO_LIMPIO'],
+      ['QUIMICA', 'LAB_QUIMICA'], ['FISICA', 'LAB_FISICA'], ['SIMULACION', 'LAB_SIMULACION'],
+      ['IDIOMAS', 'LAB_IDIOMAS'], ['AUTOACCESO', 'LAB_AUTOACCESO'], ['MAQUINADOS', 'MAQUINADOS'],
+      ['PLM', 'PLM1'], ['DRONE', 'DRONE_BOX'], ['HANGAR', 'HANGAR_MAIN'], ['POSGRADO', 'POSGRADO'],
+      ['AUDITORIO', 'AUDITORIO'], ['GIMNASIO', 'GYM'], ['GYM', 'GYM'], ['CFM', 'CFM_MAIN'], ['CREIIR', 'CREIIR_MAIN']
+    ];
+
+    const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const escapeHtml = s => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function parseDay(text) {
+      const t = norm(text).toLowerCase().replace(/[^a-z]/g, '');
+      if (!t) return null;
+      if (t.startsWith('lu')) return 0;
+      if (t.startsWith('mi') || t === 'x') return 2;
+      if (t.startsWith('ma')) return 1;
+      if (t.startsWith('ju')) return 3;
+      if (t.startsWith('vi')) return 4;
+      if (t.startsWith('sa')) return 5;
+      const single = { l: 0, m: 1, j: 3, v: 4, s: 5 };
+      return t.length === 1 && t in single ? single[t] : null;
+    }
+
+    // Busca claves de salón en un texto. Corrige errores típicos de foto (O->0, I/l->1).
+    // isPlaceField = true cuando el texto viene de la columna "salón": ahí también busca nombres (Hangar, Lab. Física...)
+    function extractRooms(text, isPlaceField) {
+      const found = [], unknown = [];
+      const up = norm(text).toUpperCase();
+      const re = /(^|[^A-Z0-9])([A-Z1])\s?-?\s?([0-9OIL]{3})(?![0-9])(\s?-?\s?B(?![A-Z0-9]))?/g;
+      let m;
+      while ((m = re.exec(up)) !== null) {
+        const letter = m[2] === '1' ? 'I' : m[2];
+        const digits = m[3].replace(/O/g, '0').replace(/[IL]/g, '1');
+        let code = letter + digits + (m[4] ? '-B' : '');
+        if (!roomIndex[code] && m[4]) code = letter + digits;
+        if (roomIndex[code]) found.push(code);
+        else if (/^[A-Z]\d{3}/.test(code) && m[2] !== '1') unknown.push(code);
+      }
+      if (found.length === 0) {
+        const hasLabWord = /\bLAB(ORATORIO)?\b|\bTALLER\b/.test(up);
+        if (isPlaceField || hasLabWord) {
+          for (const [kw, id] of PLACE_KEYWORDS) {
+            if (up.includes(kw) && roomIndex[id]) { found.push(id); break; }
+          }
+        }
+      }
+      return { found: [...new Set(found)], unknown: [...new Set(unknown)] };
+    }
+
+    function parseCSV(text) {
+      const firstLine = text.split(/\r?\n/)[0] || '';
+      const delim = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+      const rows = [];
+      let row = [], cell = '', inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+          if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+          else if (c === '"') inQuotes = false;
+          else cell += c;
+        } else if (c === '"') inQuotes = true;
+        else if (c === delim) { row.push(cell); cell = ''; }
+        else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+        else if (c !== '\r') cell += c;
+      }
+      row.push(cell); rows.push(row);
+      return rows.map(r => r.map(c => c.trim())).filter(r => r.some(c => c !== ''));
+    }
+
+    const TIME_RE = /\b(\d{1,2})[:.](\d{2})\s*(-\s*\d{1,2}[:.]\d{2})?/;
+    const cleanSubject = (s, codes) => {
+      let out = s;
+      codes.forEach(c => {
+        const m = /^([A-Z])(\d{3})(-B)?$/.exec(c);
+        const pat = m ? `${m[1]}\\s?-?\\s?${m[2]}(\\s?-?\\s?B)?` : c.replace(/_/g, ' ');
+        out = out.replace(new RegExp(pat, 'i'), '');
+      });
+      return out.replace(TIME_RE, '').replace(/\b(sal[oó]n|aula|edificio)\b/gi, '').replace(/[|·,;:()\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    };
+
+    // Convierte las filas de un CSV en clases. Acepta dos formatos:
+    //  A) Lista: dia, hora, materia, salon
+    //  B) Cuadrícula: Hora | Lunes | Martes | ... (cada celda: "Materia I011")
+    function entriesFromRows(rows) {
+      const entries = [], unknown = [];
+      if (!rows.length) return { entries, unknown };
+      const header = rows[0].map(h => norm(h).toLowerCase());
+      const dayCols = header.map((h, i) => (h.length >= 3 && parseDay(h) !== null && /^(lun|mar|mie|jue|vie|sab)/.test(h)) ? i : -1).filter(i => i >= 0);
+
+      if (dayCols.length >= 2) {
+        const timeCol = header.findIndex((h, i) => !dayCols.includes(i));
+        rows.slice(1).forEach(r => {
+          dayCols.forEach(ci => {
+            const cellText = r[ci] || '';
+            if (!cellText) return;
+            const { found, unknown: unk } = extractRooms(cellText, false);
+            unknown.push(...unk);
+            found.forEach(code => entries.push({ day: parseDay(header[ci]), time: timeCol >= 0 ? (r[timeCol] || '') : '', subject: cleanSubject(cellText, [code]), roomId: code }));
+          });
+        });
+        return { entries, unknown };
+      }
+
+      const find = (...keys) => header.findIndex(h => keys.some(k => h.includes(k)));
+      const dCol = find('dia'), tCol = find('hora', 'inicio', 'horario'), sCol = find('materia', 'asignatura', 'clase', 'curso'), pCol = find('salon', 'aula', 'lugar', 'edificio', 'ubicacion');
+      const hasHeader = [dCol, tCol, sCol, pCol].some(i => i >= 0);
+      (hasHeader ? rows.slice(1) : rows).forEach(r => {
+        const placeText = pCol >= 0 ? (r[pCol] || '') : r.join(' ');
+        const { found, unknown: unk } = extractRooms(placeText, pCol >= 0);
+        unknown.push(...unk);
+        let day = dCol >= 0 ? parseDay(r[dCol]) : null;
+        if (day === null && dCol < 0) { for (const c of r) { if (c.length >= 3 && parseDay(c) !== null && /^(lun|mar|mi|jue|vie|sab)/i.test(norm(c))) { day = parseDay(c); break; } } }
+        let time = tCol >= 0 ? (r[tCol] || '') : ((r.join(' ').match(TIME_RE) || [''])[0]);
+        const subject = sCol >= 0 ? (r[sCol] || '') : cleanSubject(r.join(' '), found);
+        found.forEach(code => entries.push({ day, time, subject, roomId: code }));
+      });
+      return { entries, unknown };
+    }
+
+    /* ---------- Lector inteligente de horarios (fotos, capturas y PDF) ----------
+       Entrada: palabras con su posición en la imagen [{ text, x0, y0, x1, y1, conf }].
+       1) Busca la fila de encabezado con los días (Lunes, Martes... o LUN, MAR...).
+       2) Si la encuentra, trata la imagen como TABLA: cada salón toma el día de su
+          columna y la hora de la fila donde empieza su celda.
+       3) Si no, la trata como LISTA (por ejemplo, la vista de horario del celular). */
+    const OCR_DAYS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const OCR_ABBR = { lun: 0, mar: 1, mie: 2, mier: 2, jue: 3, vie: 4, sab: 5 };
+    const TIME_WORD = /(\d{1,2})\s?[:.;]\s?(\d{2})/;
+    const VALID_PREFIX = new Set(Object.keys(roomIndex).filter(k => /^[A-Z]\d{3}/.test(k)).map(k => k[0]));
+    const KNOWN_CODES = Object.keys(roomIndex).filter(k => /^[A-Z]\d{3}(-B)?$/.test(k));
+    const STRONG_PLACES = [['MATERIALES COMPUESTOS', 'MATERIALES_COMP'], ['CUARTO LIMPIO', 'CUARTO_LIMPIO'], ['MAQUINADOS', 'MAQUINADOS'],
+      ['DRONE', 'DRONE_BOX'], ['HANGAR', 'HANGAR_MAIN'], ['AUDITORIO', 'AUDITORIO'], ['GIMNASIO', 'GYM'], ['CREIIR', 'CREIIR_MAIN'], ['PLM', 'PLM1'], ['CFM', 'CFM_MAIN']];
+    const LAB_PLACES = [['QUIMICA', 'LAB_QUIMICA'], ['FISICA', 'LAB_FISICA'], ['SIMULACION', 'LAB_SIMULACION'], ['IDIOMAS', 'LAB_IDIOMAS'], ['AUTOACCESO', 'LAB_AUTOACCESO']];
+
+    function lev(a, b) {
+      const m = a.length, n = b.length, d = Array.from({ length: m + 1 }, (_, i) => [i]);
+      for (let j = 1; j <= n; j++) d[0][j] = j;
+      for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      return d[m][n];
+    }
+
+    function dayOfWord(t) {
+      const w = norm(t).toLowerCase().replace(/[^a-z]/g, '');
+      if (w.length >= 5) {
+        for (let i = 0; i < OCR_DAYS.length; i++) {
+          const d = OCR_DAYS[i];
+          if (w === d || (Math.abs(w.length - d.length) <= 2 && lev(w, d) <= (d.length >= 7 ? 2 : 1))) return i;
+        }
+      }
+      if (w.length >= 3 && w.length <= 4 && w in OCR_ABBR) return OCR_ABBR[w];
+      return null;
+    }
+
+    function cleanTime(t) {
+      const m = String(t).replace(/(?<=\d)[Oo]|[Oo](?=\d|:)/g, '0').replace(/(?<=\d)[lI|]|[lI|](?=\d)/g, '1').match(TIME_WORD);
+      return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+    }
+    // En la columna de horas también acepta «800» o «1100» (dos puntos que no se leyeron)
+    function cleanTimeLoose(t) {
+      const c = cleanTime(t);
+      if (c) return c;
+      const m = String(t).replace(/[^0-9 ]/g, '').trim().match(/^(\d{1,2})(\d{2})\b/);
+      if (m && +m[1] >= 6 && +m[1] <= 22 && ['00', '15', '30', '45'].includes(m[2])) return `${m[1].padStart(2, '0')}:${m[2]}`;
+      return '';
+    }
+
+    // Busca salones en un texto, corrigiendo errores típicos de lectura (O→0, l→1, S→5...).
+    function findRoomsInText(text) {
+      const up = norm(text).toUpperCase().replace(/[|!]/g, 'I');
+      const out = [], unknown = [];
+      const re = /(^|[^A-Z0-9])([A-Z13])\s?[-–.]?\s?([0-9OQDILSBZG)\]]{3})(\s?-\s?B|\s?B)?(?![0-9A-Z])/g;
+      let m;
+      while ((m = re.exec(up)) !== null) {
+        const letter = m[2] === '1' ? 'I' : (m[2] === '3' ? 'J' : m[2]);
+        if (!VALID_PREFIX.has(letter)) continue;
+        const realDigits = (m[3].match(/[0-9]/g) || []).length;
+        if (realDigits < 1) continue; // evita confundir palabras con salones
+        const digits = m[3].replace(/[OQD]/g, '0').replace(/[IL)\]]/g, '1').replace(/S/g, '5').replace(/B/g, '8').replace(/Z/g, '2').replace(/G/g, '6');
+        const fixed = m[2] === '3'; // «3» leído en lugar de «J»: conviene revisarlo
+        let code = letter + digits + (m[4] ? '-B' : '');
+        if (!roomIndex[code] && m[4]) code = letter + digits;
+        if (roomIndex[code]) { out.push({ code, review: fixed }); continue; }
+        if (realDigits < 2) continue;
+        // ¿Hay un único salón real que difiere en un solo número? Se propone, pero se marca para revisar.
+        // Si los 3 números se leyeron claros (p. ej. «B202») se respeta: es un salón que falta en el mapa.
+        // Solo se propone el salón más parecido cuando la lectura fue dudosa.
+        const near = realDigits < 3 ? KNOWN_CODES.filter(k => k[0] === letter && !k.includes('-') && lev(k.slice(1), digits) === 1) : [];
+        if (near.length === 1) out.push({ code: near[0], review: true, read: letter + digits });
+        else unknown.push(letter + digits);
+      }
+      // Letra O de más entre la letra y el número (p. ej. «JO002» → J002)
+      const re2 = /(^|[^A-Z0-9])([A-Z13])[O0Q]([0-9OQDILSBZG]{3})(?![0-9A-Z])/g;
+      while ((m = re2.exec(up)) !== null) {
+        const letter = m[2] === '1' ? 'I' : (m[2] === '3' ? 'J' : m[2]);
+        const code = letter + m[3].replace(/[OQD]/g, '0').replace(/[IL]/g, '1').replace(/S/g, '5').replace(/B/g, '8').replace(/Z/g, '2').replace(/G/g, '6');
+        if (roomIndex[code] && !out.some(o => o.code === code)) out.push({ code, review: true });
+      }
+      if (!out.length) {
+        const toks = up.split(/[^A-Z]+/).filter(Boolean);
+        const has = kw => kw.includes(' ') ? up.includes(kw) : toks.some(t => t === kw || (kw.length >= 6 && Math.abs(t.length - kw.length) <= 2 && lev(t, kw) <= 2));
+        const hasLab = toks.some(t => t === 'LAB' || t === 'TALLER' || (t.length >= 9 && lev(t, 'LABORATORIO') <= 2));
+        for (const [kw, id] of STRONG_PLACES) if (has(kw) && roomIndex[id]) { out.push({ code: id, review: false }); break; }
+        if (!out.length && hasLab) for (const [kw, id] of LAB_PLACES) if (has(kw) && roomIndex[id]) { out.push({ code: id, review: false }); break; }
+      }
+      return { found: out, unknown };
+    }
+
+    function stripForSubject(text, rawCodes) {
+      let s = ' ' + text + ' ';
+      s = s.replace(/\b[A-Z1|]\s?[-–.]?\s?[0-9OQDILSBZG]{3}(\s?-?\s?B)?\b/gi, m => /[0-9]/.test(m) ? ' ' : m);
+      s = s.replace(/\d{1,2}\s?[:.]\s?\d{2}(\s*(-|a|–)\s*\d{1,2}\s?[:.]\s?\d{2})?/g, ' ');
+      s = s.replace(/\b(sal[oó]n|aula|edificio|edif|lab(oratorio)?|hangar|grupo)\b\.?:?/gi, ' ');
+      s = s.replace(/(^|\s)(prof|profa|profr|mtro|mtra|miro|dr|dra|br|ing|lic)\.?(\s.*)?$/i, ' ');
+      // corta desde el nombre del profesor (aunque venga mal leído: «Prot», «Mtr0»...)
+      const toks = s.replace(/[|·,;:()_\-–—=~]+/g, ' ').split(/\s+/);
+      const cut = toks.findIndex((t, i) => i > 0 && ['prof', 'profa', 'mtro', 'mtra'].some(x => lev(norm(t).toLowerCase().replace(/[^a-z0-9]/g, ''), x) <= 1));
+      s = (cut > 0 ? toks.slice(0, cut) : toks).join(' ');
+      s = s.split(/\s+/).filter(t => t && /[a-záéíóúñü]/i.test(t) && !(t.length >= 4 && t.length <= 6 && lev(norm(t).toLowerCase(), 'salon') <= 2)).join(' ');
+      return s.trim().slice(0, 48);
+    }
+
+    // Agrupa palabras en renglones según su altura en la imagen.
+    function groupLines(words) {
+      const sorted = [...words].sort((a, b) => a.cy - b.cy);
+      const lines = [];
+      for (const w of sorted) {
+        const ln = lines[lines.length - 1];
+        if (ln && Math.abs(w.cy - ln.cy) < Math.max(ln.h, w.h) * 0.55) {
+          ln.words.push(w); ln.cy = (ln.cy * (ln.words.length - 1) + w.cy) / ln.words.length;
+          ln.y0 = Math.min(ln.y0, w.y0); ln.y1 = Math.max(ln.y1, w.y1); ln.h = Math.max(ln.h, w.h);
+        } else lines.push({ words: [w], cy: w.cy, y0: w.y0, y1: w.y1, h: w.h });
+      }
+      lines.forEach(l => { l.words.sort((a, b) => a.x0 - b.x0); l.text = l.words.map(w => w.text).join(' '); l.conf = Math.min(...l.words.map(w => w.conf)); });
+      return lines;
+    }
+
+    function median(arr) { const s = [...arr].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; }
+
+    function scheduleFromWords(rawWords) {
+      let words = rawWords.filter(w => w.text && w.text.trim())
+        .map(w => ({ ...w, text: w.text.trim(), cx: (w.x0 + w.x1) / 2, cy: (w.y0 + w.y1) / 2, h: Math.max(1, w.y1 - w.y0), conf: w.conf ?? 90 }));
+      if (!words.length) return { entries: [], unknown: [], mode: 'vacío' };
+      const lineH = median(words.map(w => w.h));
+
+      // --- Encabezado de días (tolera fotos chuecas hasta ~10°) ---
+      const dayWords = words.map(w => ({ w, d: dayOfWord(w.text) })).filter(o => o.d !== null);
+      let header = null;
+      for (const o of dayWords) {
+        const row = dayWords.filter(p => Math.abs(p.w.cy - o.w.cy) < lineH * 2 + Math.abs(p.w.cx - o.w.cx) * 0.18);
+        const distinct = new Map();
+        row.forEach(p => { const prev = distinct.get(p.d); if (!prev || Math.abs(p.w.cy - o.w.cy) < Math.abs(prev.cy - o.w.cy)) distinct.set(p.d, p.w); });
+        const xs = [...distinct.values()].map(w => w.cx);
+        const spread = Math.max(...xs) - Math.min(...xs);
+        if (distinct.size >= 2 && spread > lineH * 4 && (!header || distinct.size > header.size)) header = distinct;
+      }
+
+      const entries = [], unknown = [];
+      const push = (found, day, time, subject, conf) => found.forEach(f =>
+        entries.push({ day, time, subject, roomId: f.code, review: f.review || conf < 45, read: f.read || '' }));
+
+      if (header) {
+        // Endereza las coordenadas usando la inclinación de la fila de días
+        const hw = [...header.values()];
+        let angle = 0;
+        if (hw.length >= 2) {
+          const mx = hw.reduce((t, w) => t + w.cx, 0) / hw.length, my = hw.reduce((t, w) => t + w.cy, 0) / hw.length;
+          const num = hw.reduce((t, w) => t + (w.cx - mx) * (w.cy - my), 0), den = hw.reduce((t, w) => t + (w.cx - mx) ** 2, 0);
+          angle = den ? Math.atan(num / den) : 0;
+          if (Math.abs(angle) > 0.2) angle = 0;
+        }
+        const cos = Math.cos(-angle), sin = Math.sin(-angle);
+        const rot = w => {
+          const cx = w.cx * cos - w.cy * sin, cy = w.cx * sin + w.cy * cos, hw2 = (w.x1 - w.x0) / 2;
+          return { ...w, cx, cy, x0: cx - hw2, x1: cx + hw2, y0: cy - w.h / 2, y1: cy + w.h / 2 };
+        };
+        words = words.map(rot);
+        const hdr = [...header.entries()].map(([d, w]) => ({ d, ...rot(w) })).sort((p, q) => p.d - q.d);
+        const headerBottom = Math.max(...hdr.map(o => o.y1)) + lineH * 0.3;
+        const body = words.filter(w => w.cy > headerBottom);
+
+        // Borde izquierdo: justo después de la columna de horas
+        const timeWords = body.filter(w => cleanTimeLoose(w.text) && w.cx < hdr[0].cx);
+        let leftEdge = hdr[0].x0 - lineH * 3;
+        if (timeWords.length >= 2) {
+          const minX = Math.min(...timeWords.map(w => w.x0));
+          leftEdge = Math.max(...timeWords.filter(w => w.x0 < minX + lineH * 6).map(w => w.x1)) + lineH * 0.3;
+        }
+        if (leftEdge > hdr[0].x0 + lineH) leftEdge = hdr[0].x0;
+
+        // Límites de cada columna: a la mitad del espacio entre encabezados vecinos
+        const consecutive = hdr.every((o, i) => i === 0 || (o.d === hdr[i - 1].d + 1 && o.cx > hdr[i - 1].cx));
+        let bounds;
+        if (consecutive) {
+          bounds = hdr.map((o, i) => ({ d: o.d, lo: i === 0 ? leftEdge : (hdr[i - 1].x1 + o.x0) / 2, hi: i === hdr.length - 1 ? null : (o.x1 + hdr[i + 1].x0) / 2 }));
+          const widths = bounds.filter(c => c.hi !== null && c.lo !== null).map(c => c.hi - c.lo);
+          const avgW = widths.length ? median(widths) : Math.max(lineH * 8, hdr[0].x1 - leftEdge);
+          bounds[bounds.length - 1].hi = hdr[hdr.length - 1].x1 + avgW * 0.8;
+          // Si no se leyó el primer día (p. ej. «Lunes») pero hay espacio a la izquierda, se agrega su columna
+          const spacing = hdr.length >= 2 ? (hdr[hdr.length - 1].cx - hdr[0].cx) / (hdr[hdr.length - 1].d - hdr[0].d) : avgW;
+          for (let d = hdr[0].d - 1, k = 1; d >= 0; d--, k++) {
+            const center = hdr[0].cx - k * spacing;
+            if (center < leftEdge + spacing * 0.25) break;
+            const first = bounds[0];
+            if (k === 1) first.lo = hdr[0].cx - spacing / 2;
+            bounds.unshift({ d, lo: Math.max(leftEdge, center - spacing / 2), hi: first.lo });
+          }
+          for (let d = hdr[hdr.length - 1].d + 1, k = 1; d <= 5; d++, k++) {
+            const last = bounds[bounds.length - 1], center = hdr[hdr.length - 1].cx + k * spacing;
+            if (!words.some(w => w.cx > last.hi && w.cx < center + spacing / 2 && w.cy > headerBottom)) break;
+            bounds.push({ d, lo: last.hi, hi: center + spacing / 2 });
+          }
+        } else {
+          // Falta algún día en el encabezado: se estima la posición de cada columna con un ajuste lineal
+          const n = hdr.length, sx = hdr.reduce((t, o) => t + o.d, 0), sy = hdr.reduce((t, o) => t + o.cx, 0);
+          const sxx = hdr.reduce((t, o) => t + o.d * o.d, 0), sxy = hdr.reduce((t, o) => t + o.d * o.cx, 0);
+          const bb = (n * sxy - sx * sy) / (n * sxx - sx * sx), aa = (sy - bb * sx) / n;
+          const dMin = hdr[0].d, dMax = Math.min(5, hdr[hdr.length - 1].d + 1);
+          bounds = [];
+          for (let d = dMin; d <= dMax; d++) bounds.push({ d, lo: aa + bb * d - Math.abs(bb) / 2, hi: aa + bb * d + Math.abs(bb) / 2 });
+          bounds[0].lo = Math.min(bounds[0].lo, Math.max(leftEdge, bounds[0].lo - Math.abs(bb) * 0.3));
+        }
+        const colOf = x => { const c = bounds.find(c => x >= c.lo && x < c.hi); return c ? c.d : null; };
+
+        const timeLabels = groupLines(body.filter(w => w.cx < leftEdge))
+          .map(l => ({ y0: l.y0, cy: l.cy, t: cleanTimeLoose(l.words[0].text) || cleanTime(l.text) })).filter(l => l.t).sort((p, q) => p.cy - q.cy);
+        // Si casi todas las filas avanzan de hora en hora, se corrigen las horas mal leídas
+        if (timeLabels.length >= 3) {
+          const diffs = timeLabels.slice(1).map((t, i) => t.cy - timeLabels[i].cy);
+          const rowH = median(diffs);
+          // Solo si las filas tienen altura pareja (como en el horario de la UNAQ)
+          const uniform = diffs.filter(d => Math.abs(d / rowH - Math.round(d / rowH)) < 0.15).length >= diffs.length * 0.8;
+          if (rowH > 0 && uniform) {
+            const idx = timeLabels.map(t => Math.round((t.cy - timeLabels[0].cy) / rowH));
+            const votes = new Map();
+            timeLabels.forEach((t, i) => { const k = (parseInt(t.t) - idx[i]) + '|' + t.t.slice(3); votes.set(k, (votes.get(k) || 0) + 1); });
+            const [best, n] = [...votes.entries()].sort((p, q) => q[1] - p[1])[0];
+            if (n >= timeLabels.length * 0.5) {
+              const [h0, mm] = best.split('|');
+              timeLabels.forEach((t, i) => { const h = +h0 + idx[i]; if (h >= 0 && h <= 23) t.t = String(h).padStart(2, '0') + ':' + mm; });
+            }
+          }
+        }
+        // Rellena horas que no se leyeron: entre 09:00 y 11:00 debe haber una fila de 10:00
+        for (let i = 0; i < timeLabels.length - 1; i++) {
+          const a = timeLabels[i], z = timeLabels[i + 1], k = parseInt(z.t) - parseInt(a.t);
+          if (k > 1 && k <= 4 && z.t.slice(3) === a.t.slice(3)) {
+            const fill = [];
+            for (let j = 1; j < k; j++) fill.push({ y0: a.y0 + (z.y0 - a.y0) * j / k, cy: a.cy + (z.cy - a.cy) * j / k, t: String(parseInt(a.t) + j).padStart(2, '0') + a.t.slice(2) });
+            timeLabels.splice(i + 1, 0, ...fill);
+            i += fill.length;
+          }
+        }
+        const byCol = new Map();
+        body.forEach(w => { const d = colOf(w.cx); if (d !== null) { if (!byCol.has(d)) byCol.set(d, []); byCol.get(d).push(w); } });
+
+        const TITLES = ['prof', 'profa', 'profr', 'mtro', 'mtra', 'maestro', 'maestra', 'dr', 'dra', 'ing', 'lic', 'docente'];
+        const isTeacherLine = ln => {
+          const t = norm(ln.words[0].text).toLowerCase().replace(/[^a-z]/g, '');
+          return t.length >= 2 && TITLES.some(x => t === x || (t.length >= 3 && x.length >= 3 && lev(t, x) <= 1));
+        };
+
+        // Código de grupo (p. ej. «IDMA24-07C»): una sola palabra con letras, números y guion
+        const isGroupLine = ln => {
+          const t = norm(ln.text).toUpperCase().replace(/\s+/g, '');
+          return ln.words.length <= 2 && t.length >= 6 && t.length <= 14 && /[A-Z]/.test(t) && /\d.*[-–].*\d|\d{2}[-–]/.test(t) && !findRoomsInText(ln.text).found.length;
+        };
+        for (const [d, ws] of byCol) {
+          // Ignora renglones de basura (restos de bordes o manchas): sin ninguna palabra de 3+ letras o números
+          const lines = groupLines(ws).filter(l => /[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ]{3,}/.test(norm(l.text)));
+          // Junta renglones en celdas: se separan si hay un hueco grande o si se cruza el límite de una fila ya con salón
+          const cells = [];
+          for (const ln of lines) {
+            const cur = cells[cells.length - 1];
+            const gap = cur ? ln.y0 - cur.y1 : Infinity;
+            const crosses = cur && timeLabels.length > 1 && timeLabels.some((t, i) => i > 0 && (timeLabels[i - 1].cy + t.cy) / 2 > cur.y1 - lineH * 0.2 && (timeLabels[i - 1].cy + t.cy) / 2 < ln.y0 + lineH * 0.2);
+            const curHasRoom = cur && findRoomsInText(cur.lines.map(l => l.text).join(' ')).found.length > 0;
+            const newGroup = cur && isGroupLine(ln) && cur.lines.length >= 2; // en el formato UNAQ cada celda empieza con el grupo
+            if (cur && gap < lineH * 2.2 && !(crosses && curHasRoom) && !newGroup) { cur.lines.push(ln); cur.y1 = ln.y1; }
+            else cells.push({ lines: [ln], y0: ln.y0, y1: ln.y1 });
+          }
+          for (const c of cells) {
+            const text = c.lines.map(l => l.text).join(' ');
+            const { found, unknown: unk } = findRoomsInText(text);
+            unknown.push(...unk);
+            if (!found.length) continue;
+            let time = cleanTime(text);
+            if (!time && timeLabels.length) {
+              const y = c.lines[0].cy;
+              let i = 0;
+              while (i < timeLabels.length - 1 && y > (timeLabels[i].cy + timeLabels[i + 1].cy) / 2) i++;
+              time = timeLabels[i].t;
+            }
+            let codeIdx = c.lines.findIndex(l => findRoomsInText(l.text).found.length);
+            if (codeIdx < 0) codeIdx = c.lines.length - 1;
+            const before = c.lines.slice(0, codeIdx).filter(l => !isTeacherLine(l) && !isGroupLine(l)).map(l => ({ t: stripForSubject(l.text), h: l.h })).filter(x => x.t.length > 2);
+            let subject = before.length ? before[0].t : stripForSubject(c.lines[codeIdx].text);
+            // 2 renglones antes del salón = materia + profesor; 3 o más = la materia puede ocupar 2 renglones
+            if (before.length >= 3 && before[0].t.length < 16 && before[1].t !== before[0].t && before[1].h >= before[0].h * 0.85) subject += ' ' + before[1].t;
+            const codeWords = c.lines[codeIdx].words.filter(w => /\d/.test(w.text));
+            push(found, d, time, subject, Math.min(...(codeWords.length ? codeWords : c.lines[codeIdx].words).map(w => w.conf)));
+          }
+        }
+        if (entries.length) return { entries, unknown, mode: 'tabla' };
+      }
+
+      // --- Modo lista ---
+      const lines = groupLines(words);
+      let day = null, time = '', buffer = [];
+      for (const ln of lines) {
+        const dws = ln.words.map(w => dayOfWord(w.text)).filter(d => d !== null);
+        if (new Set(dws).size >= 2) { day = null; buffer = []; continue; }
+        const isDayLine = dws.length && (ln.words.length <= 3 || dayOfWord(ln.words[0].text) !== null && norm(ln.words[0].text).length >= 5);
+        if (isDayLine) { day = dws[0]; time = ''; buffer = []; continue; }
+        const t = cleanTime(ln.text);
+        if (t) time = t;
+        const { found, unknown: unk } = findRoomsInText(ln.text);
+        unknown.push(...unk);
+        if (found.length) {
+          let subject = stripForSubject(ln.text);
+          if (subject.length < 3) subject = buffer.map(stripForSubject).filter(s => s.length > 2).pop() || '';
+          push(found, day, time, subject, ln.conf);
+          buffer = [];
+        } else buffer.push(ln.text);
+      }
+      return { entries, unknown, mode: 'lista' };
+    }
+
+    // Junta dos lecturas de la misma imagen: si dos palabras ocupan el mismo lugar, se queda la más confiable
+    function mergeWordSets(A, B) {
+      const out = A.slice();
+      const area = w => Math.max(1, (w.x1 - w.x0) * (w.y1 - w.y0));
+      for (const b of B) {
+        let hit = -1;
+        for (let i = 0; i < out.length; i++) {
+          const a = out[i];
+          const ix = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), iy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+          if (ix > 0 && iy > 0 && ix * iy > 0.5 * Math.min(area(a), area(b))) { hit = i; break; }
+        }
+        if (hit < 0) out.push(b);
+        else if ((b.conf ?? 0) > (out[hit].conf ?? 0) + 5) out[hit] = b;
+      }
+      return out;
+    }
+
+    // Convierte la salida de Tesseract (cualquier versión) a palabras con posición
+    function wordsFromTesseract(data) {
+      if (Array.isArray(data.words) && data.words.length)
+        return data.words.map(w => ({ text: w.text, conf: w.confidence, x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 }));
+      const out = [];
+      (data.blocks || []).forEach(b => (b.paragraphs || []).forEach(p => (p.lines || []).forEach(l => (l.words || []).forEach(w =>
+        out.push({ text: w.text, conf: w.confidence, x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1 })))));
+      if (out.length) return out;
+      return wordsFromTSV(data.tsv || '');
+    }
+    function wordsFromTSV(tsv) {
+      return tsv.split('\n').map(r => r.split('\t')).filter(c => c[0] === '5' && c[11] && c[11].trim())
+        .map(c => ({ text: c[11], conf: Number(c[10]), x0: +c[6], y0: +c[7], x1: +c[6] + +c[8], y1: +c[7] + +c[9] }));
+    }
+
+    /* ---------- Preparar la imagen antes de leerla ----------
+       1) Ajusta el tamaño para que las letras tengan buen tamaño.
+       2) Convierte a blanco y negro, aclarando cada zona por separado
+          (así se leen encabezados con letra blanca y el modo oscuro).
+       3) Borra las líneas de la tabla, que confunden al lector. */
+    function boxBlur(src, W, H, r, ry) {
+      if (ry === undefined) ry = r;
+      const I = new Uint32Array((W + 1) * (H + 1));
+      for (let y = 1; y <= H; y++) {
+        let row = 0;
+        for (let x = 1; x <= W; x++) { row += src[(y - 1) * W + x - 1]; I[y * (W + 1) + x] = I[(y - 1) * (W + 1) + x] + row; }
+      }
+      const out = new Uint8Array(W * H);
+      for (let y = 0; y < H; y++) {
+        const ya = Math.max(0, y - ry), yb = Math.min(H, y + ry + 1);
+        for (let x = 0; x < W; x++) {
+          const xa = Math.max(0, x - r), xb = Math.min(W, x + r + 1);
+          const sum = I[yb * (W + 1) + xb] - I[ya * (W + 1) + xb] - I[yb * (W + 1) + xa] + I[ya * (W + 1) + xa];
+          out[y * W + x] = sum / ((yb - ya) * (xb - xa));
+        }
+      }
+      return out;
+    }
+
+    function preprocessForOcr(source, w, h, mode) {
+      let s = Math.min(3, Math.max(1, 2600 / w));
+      s = Math.min(s, 4200 / Math.max(w, h), Math.sqrt(4.5e6 / (w * h))); // límite de memoria para celulares
+      const W = Math.max(1, Math.round(w * s)), H = Math.max(1, Math.round(h * s)), N = W * H;
+      const c = document.createElement('canvas');
+      c.width = W; c.height = H;
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+      ctx.drawImage(source, 0, 0, W, H);
+      const img = ctx.getImageData(0, 0, W, H), d = img.data;
+      const g = new Uint8Array(N);
+      for (let i = 0, j = 0; i < N; i++, j += 4) g[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+      const r = Math.max(8, Math.round(Math.max(W, H) / 90));
+      const B = boxBlur(g, W, H, r);
+      // Se invierte solo donde hay LETRA CLARA SOBRE FONDO OSCURO (encabezados, modo oscuro).
+      // Las celdas de color con letra oscura se dejan igual.
+      const bright = new Uint8Array(N);
+      for (let i = 0; i < N; i++) bright[i] = g[i] > 150 ? 255 : 0;
+      // Ventana ancha y baja: recorre el renglón completo, así una franja oscura (encabezado) se distingue de un renglón de texto negro
+      const rx = Math.max(40, Math.round(W / 10)), ry = Math.max(3, Math.round(2 * s));
+      // Se cuentan los pixeles casi negros: si son pocos pero existen, es letra negra sobre color (no se invierte)
+      const black = new Uint8Array(N);
+      for (let i = 0; i < N; i++) black[i] = g[i] < 32 ? 255 : 0;
+      const meanS = boxBlur(g, W, H, rx, ry), brightS = boxBlur(bright, W, H, rx, ry), blackS = boxBlur(black, W, H, rx, ry);
+      const brightB = boxBlur(bright, W, H, r), blackB = boxBlur(black, W, H, r);
+      // Pistas: «aquí hay letra clara sobre oscuro» vs. «aquí hay letra negra sobre color».
+      // Se extienden a toda la zona para que cada celda o franja se trate igual (sin manchas).
+      const evInv = new Uint8Array(N), evKeep = new Uint8Array(N);
+      for (let i = 0; i < N; i++) evInv[i] = g[i] < 110 ? 255 : 0;
+      const darkS = boxBlur(evInv, W, H, rx, ry); // fracción de fondo oscuro en el renglón (una franja real es casi toda oscura)
+      for (let i = 0; i < N; i++) {
+        const band = darkS[i] > 150 && brightS[i] > 5 && blackS[i] < 8;
+        const darkMode = B[i] < 120 && brightB[i] > 13 && (blackB[i] < 8 || blackB[i] > 128);
+        evInv[i] = band || darkMode ? 255 : 0;
+        evKeep[i] = B[i] < 140 && blackB[i] >= 8 && blackB[i] <= 128 ? 255 : 0;
+      }
+      const eI = boxBlur(evInv, W, H, 2 * r), eK = boxBlur(evKeep, W, H, 2 * r);
+      for (let i = 0; i < N; i++) {
+        if (meanS[i] >= 150) continue; // zonas claras: nunca se invierten
+        if (eI[i] > eK[i] || (eI[i] === 0 && eK[i] === 0 && B[i] < 100)) g[i] = 255 - g[i];
+      }
+      const B2 = boxBlur(g, W, H, r);
+      const mx = new Uint8Array(N);
+      for (let i = 0; i < N; i++) mx[i] = Math.max(g[i], B2[i]);
+      const B3 = boxBlur(mx, W, H, r);
+      const ink = new Uint8Array(N), flat = new Uint8Array(N);
+      for (let i = 0; i < N; i++) { const bg = Math.max(B2[i], B3[i], 1); const v = Math.min(255, (g[i] / bg) * 255); flat[i] = v; ink[i] = v < 170 ? 1 : 0; }
+      // Quitar líneas largas (bordes de la tabla)
+      const kill = new Uint8Array(N);
+      const LH = Math.max(30, Math.floor(W / 30)), LV = Math.max(30, Math.floor(Math.min(W, H) / 25));
+      for (let y = 0; y < H; y++) {
+        let start = -1;
+        for (let x = 0; x <= W; x++) {
+          const on = x < W && ink[y * W + x];
+          if (on && start < 0) start = x;
+          if (!on && start >= 0) { if (x - start >= LH) for (let k = start; k < x; k++) kill[y * W + k] = 1; start = -1; }
+        }
+      }
+      for (let x = 0; x < W; x++) {
+        let start = -1;
+        for (let y = 0; y <= H; y++) {
+          const on = y < H && ink[y * W + x];
+          if (on && start < 0) start = y;
+          if (!on && start >= 0) { if (y - start >= LV) for (let k = start; k < y; k++) kill[k * W + x] = 1; start = -1; }
+        }
+      }
+      for (let i = 0, j = 0; i < N; i++, j += 4) {
+        const v = mode === 'gray' ? (kill[i] ? 255 : flat[i]) : (ink[i] && !kill[i] ? 0 : 255);
+        d[j] = d[j + 1] = d[j + 2] = v; d[j + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+      return c;
+    }
+
+    /* ---------- Lectores (foto, PDF) ---------- */
+    const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    const PDFJS_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
+    const PDFJS_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+    let ocrWorker = null;
+
+    function loadScriptOnce(src, globalName) {
+      return new Promise((resolve, reject) => {
+        if (window[globalName]) return resolve();
+        const s = document.createElement('script');
+        s.src = src; s.onload = resolve;
+        s.onerror = () => reject(new Error('no se pudo descargar el lector. Revisa tu conexión a internet'));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function getOcrWorker() {
+      if (ocrWorker) return ocrWorker;
+      setStatus('Descargando el lector de horarios (solo la primera vez)…', 'info');
+      await loadScriptOnce(TESS_URL, 'Tesseract');
+      ocrWorker = await Tesseract.createWorker('spa', 1, {
+        logger: m => {
+          if (m.status === 'recognizing text') { setProgress(0.35 + 0.65 * m.progress); setStatus(`Leyendo tu horario… ${Math.round(m.progress * 100)}%`, 'info'); }
+          else if (typeof m.progress === 'number') setProgress(0.1 + 0.2 * m.progress);
+        }
+      });
+      await ocrWorker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' });
+      return ocrWorker;
+    }
+
+    function loadImage(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => resolve({ img, url });
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('no se pudo abrir la imagen. Prueba con una captura de pantalla (PNG o JPG)')); };
+        img.src = url;
+      });
+    }
+
+    async function readCanvasOrImage(source, w, h) {
+      setStatus('Preparando la imagen…', 'info'); setProgress(0.05);
+      await new Promise(r => setTimeout(r, 30)); // deja que se pinte el mensaje
+      const worker = await getOcrWorker();
+      setStatus('Leyendo tu horario…', 'info'); setProgress(0.35);
+      const pass1 = wordsFromTesseract((await worker.recognize(preprocessForOcr(source, w, h, 'bin'), {}, { text: true, blocks: true, tsv: true })).data);
+      const r1 = scheduleFromWords(pass1);
+      if (r1.entries.length >= 4) return r1;
+      // Pocas clases encontradas: se lee otra vez con otro ajuste de imagen y se combinan ambas lecturas
+      setStatus('Revisando la imagen con más detalle…', 'info'); setProgress(0.35);
+      const pass2 = wordsFromTesseract((await worker.recognize(preprocessForOcr(source, w, h, 'gray'), {}, { text: true, blocks: true, tsv: true })).data);
+      const r2 = scheduleFromWords(mergeWordSets(pass1, pass2));
+      return r2.entries.length > r1.entries.length ? r2 : r1;
+    }
+
+    async function readImage(file) {
+      const { img, url } = await loadImage(file);
+      try { return await readCanvasOrImage(img, img.naturalWidth, img.naturalHeight); }
+      finally { URL.revokeObjectURL(url); }
+    }
+
+    async function readPdf(file) {
+      setStatus('Abriendo el PDF…', 'info'); setProgress(0.1);
+      let pdfjs;
+      try { pdfjs = await import(PDFJS_URL); } catch (e) { throw new Error('no se pudo descargar el lector de PDF. Revisa tu conexión a internet'); }
+      pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+      const words = [];
+      let offset = 0;
+      for (let p = 1; p <= Math.min(doc.numPages, 3); p++) {
+        const page = await doc.getPage(p);
+        const vp = page.getViewport({ scale: 1 });
+        const tc = await page.getTextContent();
+        tc.items.forEach(it => {
+          if (!it.str || !it.str.trim()) return;
+          const [x, yb] = vp.convertToViewportPoint ? vp.convertToViewportPoint(it.transform[4], it.transform[5]) : [it.transform[4], vp.height - it.transform[5]];
+          const h = Math.abs(it.height || it.transform[3]) || 10;
+          const per = (it.width || h * it.str.length * 0.5) / it.str.length;
+          let cx = x;
+          it.str.split(/(\s+)/).forEach(part => {
+            if (part.trim()) words.push({ text: part, conf: 99, x0: cx, x1: cx + part.length * per, y0: offset + yb - h, y1: offset + yb });
+            cx += part.length * per;
+          });
+        });
+        offset += vp.height + 50;
+        setProgress(0.1 + 0.6 * p / Math.min(doc.numPages, 3));
+      }
+      if (words.length >= 5) return scheduleFromWords(words);
+      // PDF escaneado (sin texto): se convierte la primera página en imagen y se lee
+      const page = await doc.getPage(1);
+      const vp = page.getViewport({ scale: 2.5 });
+      const c = document.createElement('canvas');
+      c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      return readCanvasOrImage(c, c.width, c.height);
+    }
+
+/* ======================= INTERFAZ ======================= */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+const CAT = {
+  aula:   { name: 'Aulas de clase',          badge: 'AULA',            fill: '#0369A1', stroke: '#38BDF8' },
+  lab:    { name: 'Cómputo y laboratorios',  badge: 'LABORATORIO',     fill: '#6B21A8', stroke: '#C084FC' },
+  cafe:   { name: 'Cafeterías',              badge: 'CAFETERÍA',       fill: '#B45309', stroke: '#FBBF24' },
+  wc:     { name: 'Baños',                   badge: 'BAÑOS',           fill: '#0891B2', stroke: '#22D3EE' },
+  admin:  { name: 'Servicios',               badge: 'SERVICIOS',       fill: '#047857', stroke: '#34D399' },
+  hangar: { name: 'Hangares y talleres',     badge: 'HANGAR / TALLER', fill: '#BE123C', stroke: '#FB7185' },
+  print:  { name: 'Impresoras',              badge: 'IMPRESORA',       fill: '#65A30D', stroke: '#BEF264' },
+  creiir: { name: 'CREIIR y referencias',    badge: 'CREIIR',          fill: '#475569', stroke: '#CBD5E1' }
+};
+const SECTORS = [
+  ['principal', 'Salones I · C · F'], ['edificioA_PB', 'Edif. A/B · PB'], ['edificioA_P1', 'Edif. A/B · 1° piso'],
+  ['edificioA_P2', 'Edif. A/B · 2° piso'], ['cfm', 'CFM'], ['hangar', 'Hangar'], ['edificioD', 'Edif. D · Cafetería'], ['creiir', 'CREIIR']
+];
+const VIEW_TITLES = { mapa: 'Mapa del campus', porque: '¿Por qué hacemos esto?', sugerencias: 'Sugerencias' };
+
+const state = {
+  view: 'mapa', sector: 'principal', highlight: null,
+  cats: Object.fromEntries(Object.keys(CAT).map(k => [k, true])),
+  zoom: 1, panX: 0, panY: 0, loaded: {}
+};
+
+/* ---------- Menú lateral y vistas ---------- */
+function openDrawer() { $('#drawer').classList.add('open'); $('#drawerScrim').classList.add('show'); }
+function closeDrawer() { $('#drawer').classList.remove('open'); $('#drawerScrim').classList.remove('show'); }
+function showView(name) {
+  state.view = name;
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+  $$('.navItem').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  $('#sectionTitle').textContent = VIEW_TITLES[name];
+  closeDrawer(); closeSheets();
+  if (name === 'porque' && !state.loaded.porque) { state.loaded.porque = true; loadPdf(); loadVideo(); }
+  if (name === 'sugerencias' && !state.loaded.form) { state.loaded.form = true; loadForm(); }
+}
+
+/* ---------- Enlaces (PDF, video, formulario) ---------- */
+function driveId(url) { const m = url.match(/\/d\/([\w-]{20,})/) || url.match(/[?&]id=([\w-]{20,})/); return m ? m[1] : null; }
+function placeholder(icon, html) { return `<div class="placeholder">${icon}<div>${html}</div></div>`; }
+const ICON_DOC = '<svg class="i" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
+const ICON_VID = '<svg class="i" viewBox="0 0 24 24"><rect x="2" y="5" width="15" height="14" rx="2"/><path d="m17 10 5-3v10l-5-3"/></svg>';
+const ICON_MSG = '<svg class="i" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+
+async function loadPdf() {
+  const url = (CONFIG.PDF_URL || '').trim(), slot = $('#pdfSlot');
+  if (!url) { slot.innerHTML = placeholder(ICON_DOC, '<b>Próximamente</b><br>Aquí aparecerá el PDF del marco teórico.'); return; }
+  const id = driveId(url);
+  if (id) {
+    slot.innerHTML = `<iframe class="frame pdfFrame" src="https://drive.google.com/file/d/${id}/preview" title="Marco teórico" loading="lazy"></iframe>
+      <a class="btn sky full" href="https://drive.google.com/file/d/${id}/view" target="_blank" rel="noopener" style="text-decoration:none;margin-top:12px">Abrir PDF en pantalla completa</a>`;
+    return;
+  }
+  // PDF propio: se dibuja página por página (un iframe con PDF en iPhone solo muestra la primera hoja)
+  slot.innerHTML = `<div class="pdfPages" id="pdfPages"><div class="empty">Cargando el marco teórico…</div></div>
+    <a class="btn sky full" href="${url}" target="_blank" rel="noopener" style="text-decoration:none;margin-top:12px">Abrir o descargar el PDF</a>`;
+  const box = $('#pdfPages');
+  try {
+    const pdfjs = await import(PDFJS_URL);
+    pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const doc = await pdfjs.getDocument({ url: new URL(url, location.href).href }).promise;
+    box.innerHTML = '';
+    const w = box.clientWidth - 16 || 320, dpr = Math.min(2, window.devicePixelRatio || 1);
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const vp = page.getViewport({ scale: (w * dpr) / page.getViewport({ scale: 1 }).width });
+      const c = document.createElement('canvas');
+      c.width = Math.round(vp.width); c.height = Math.round(vp.height); c.className = 'pdfPage';
+      box.appendChild(c);
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    }
+  } catch (e) {
+    console.warn('PDF:', e);
+    box.innerHTML = placeholder(ICON_DOC, 'No se pudo mostrar el PDF aquí. Toca el botón para abrirlo.');
+  }
+}
+function loadVideo() {
+  const url = (CONFIG.VIDEO_URL || '').trim(), slot = $('#videoSlot');
+  if (!url) { slot.innerHTML = placeholder(ICON_VID, '<b>Próximamente</b><br>Estamos grabando el video del proyecto.'); return; }
+  // Archivo de video propio (MP4): se reproduce dentro de la página, también en iPhone
+  if (/\.(mp4|m4v|webm|mov)(\?|$)/i.test(url)) {
+    slot.innerHTML = `<div class="vvideo"><video controls playsinline preload="metadata" poster="${CONFIG.VIDEO_POSTER || ''}">
+      <source src="${url}" type="video/mp4">Tu navegador no puede reproducir este video.</video></div>`;
+    const src = slot.querySelector('source');
+    src.addEventListener('error', () => {
+      slot.innerHTML = placeholder(ICON_VID, `No se encontró el video. Asegúrate de subir <b>${escapeHtml(url)}</b> en la misma carpeta que la página.`);
+    });
+    slot.insertAdjacentHTML('beforeend', `
+      <p class="videoCap">Cómo usar el mapa: subir tu horario, revisar tus clases y encontrar tus salones.</p>`);
+    return;
+  }
+  const yt = url.match(/(?:youtu\.be\/|[?&]v=|embed\/|shorts\/|live\/)([\w-]{11})/);
+  const id = driveId(url);
+  const src = yt ? `https://www.youtube-nocookie.com/embed/${yt[1]}?rel=0&playsinline=1` : (id ? `https://drive.google.com/file/d/${id}/preview` : url);
+  slot.innerHTML = `<div class="video"><iframe src="${src}" title="Video del proyecto" loading="lazy" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`;
+}
+function loadForm() {
+  const url = (CONFIG.FORM_URL || '').trim(), slot = $('#formSlot');
+  if (!url) { slot.innerHTML = placeholder(ICON_MSG, '<b>Próximamente</b><br>Muy pronto podrás dejar tus sugerencias aquí.'); return; }
+  if (/\/forms\/d\/e\//.test(url)) {
+    const src = url.split('?')[0].replace(/\/(viewform|formResponse)$/, '') + '/viewform?embedded=true';
+    slot.innerHTML = `<iframe class="frame formFrame" src="${src}" title="Sugerencias" loading="lazy">Cargando…</iframe>`;
+  } else {
+    slot.innerHTML = placeholder(ICON_MSG, 'Toca el botón para abrir el formulario de sugerencias.') +
+      `<a class="btn sky full" href="${url}" target="_blank" rel="noopener" style="text-decoration:none;margin-top:12px">Abrir formulario</a>`;
+  }
+}
+
+/* ---------- Hojas inferiores ---------- */
+function openSheet(id) {
+  state.sheetOpenedAt = Date.now();
+  $$('.sheet').forEach(s => s.classList.toggle('open', s.id === 'sheet-' + id));
+  $('#sheetScrim').classList.add('show');
+  $('#searchResults').hidden = true;
+}
+function closeSheets() { $$('.sheet').forEach(s => s.classList.remove('open')); $('#sheetScrim').classList.remove('show'); }
+
+/* ---------- Mapa ---------- */
+function scheduledIds() {
+  return new Set(scheduleEntries.filter(e => e.roomId && (selectedDay === 'all' || e.day === selectedDay || e.day === null)).map(e => e.roomId));
+}
+
+function renderChips() {
+  const sched = scheduledIds();
+  $('#sectorChips').innerHTML = SECTORS.map(([key, label]) => {
+    const n = campusData[key].rooms.filter(r => sched.has(r.id)).length;
+    return `<button class="chip ${key === state.sector ? 'active' : ''}" data-sector="${key}">${label}${n ? `<span class="count">${n}</span>` : ''}</button>`;
+  }).join('');
+}
+
+function renderMap() {
+  const b = campusData[state.sector];
+  const sched = scheduledIds();
+  let rooms = '';
+  b.rooms.forEach(r => {
+    const isS = sched.has(r.id), isH = r.id === state.highlight;
+    if (!state.cats[r.category] && !isS && !isH) return;
+    const c = CAT[r.category] || CAT.creiir;
+    let fs = r.w < 46 ? 8 : (r.w < 60 ? 9 : 11);
+    if (r.category === 'print') fs = 13;
+    const cls = isH ? 'room hl' : (isS ? 'room sched' : 'room');
+    rooms += `<g data-room="${r.id}"><rect class="${cls}" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="6" fill="${c.fill}" stroke="${c.stroke}"/>` +
+      `<text class="roomText" x="${r.x + r.w / 2}" y="${r.y + r.h / 2}" dy="0.35em" text-anchor="middle" font-size="${fs}" fill="${isS && !isH ? '#0A1118' : '#FFFFFF'}">${escapeHtml(r.label)}</text></g>`;
+  });
+  let pins = '';
+  b.pins.forEach(p => {
+    if (!state.cats[p.category]) return;
+    pins += `<g data-pin="${p.id}" transform="translate(${p.x},${p.y})"><circle r="16" fill="transparent"/><g transform="scale(0.75)"><circle r="12" fill="#002B49" stroke="#00A3E0" stroke-width="2"/>` +
+      `<path d="M0 -6 C-3.3 -6 -5.5 -3.6 -5.5 -0.6 C-5.5 3.6 0 8 0 8 C0 8 5.5 3.6 5.5 -0.6 C5.5 -3.6 3.3 -6 0 -6 Z" fill="#FF6B00"/><circle r="1.8" cy="-1" fill="#fff"/></g></g>`;
+  });
+  $('#mapCanvas').innerHTML = `<svg id="svgMap" viewBox="${b.viewBox || '0 0 600 600'}" preserveAspectRatio="xMidYMid meet">
+    <defs><pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M30 0H0V30" fill="none" stroke="#1E2E3D" stroke-width="0.6"/></pattern></defs>
+    <rect x="-600" y="-600" width="1800" height="2100" fill="url(#grid)"/><g>${rooms}</g><g>${pins}</g></svg>`;
+  applyTransform();
+  renderChips();
+  updateHorarioBadge();
+}
+
+function applyTransform() {
+  const svg = $('#svgMap');
+  if (svg) svg.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+}
+const clampZoom = z => Math.min(5, Math.max(0.7, z));
+function setSector(key) {
+  if (!campusData[key]) return;
+  state.sector = key; state.zoom = 1; state.panX = 0; state.panY = 0;
+  renderMap();
+  const chip = document.querySelector(`.chip[data-sector="${key}"]`);
+  if (chip && chip.scrollIntoView) chip.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+function initGestures() {
+  const vp = $('#mapViewport');
+  const pts = new Map();
+  let startDist = 1, startZoom = 1, moved = false, multi = false, down = null, downTarget = null;
+  vp.addEventListener('pointerdown', e => {
+    $('#searchResults').hidden = true;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) { moved = false; multi = false; down = { x: e.clientX, y: e.clientY }; downTarget = e.target; }
+    if (pts.size === 2) {
+      multi = true;
+      const [a, b] = [...pts.values()];
+      startDist = Math.hypot(a.x - b.x, a.y - b.y) || 1; startZoom = state.zoom;
+    }
+  });
+  vp.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    const prev = pts.get(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size >= 2) {
+      const [a, b] = [...pts.values()];
+      state.zoom = clampZoom(startZoom * Math.hypot(a.x - b.x, a.y - b.y) / startDist);
+      moved = true; applyTransform();
+    } else if (!multi) {
+      if (!moved && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) return;
+      moved = true;
+      state.panX += e.clientX - prev.x; state.panY += e.clientY - prev.y;
+      applyTransform();
+    }
+  });
+  const end = e => {
+    const tap = pts.has(e.pointerId) && pts.size === 1 && !moved && !multi;
+    pts.delete(e.pointerId);
+    if (tap && e.type === 'pointerup') handleTap(downTarget);
+    if (pts.size === 0) multi = false;
+  };
+  vp.addEventListener('pointerup', end);
+  vp.addEventListener('pointercancel', end);
+  vp.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') pts.delete(e.pointerId); });
+  vp.addEventListener('wheel', e => { e.preventDefault(); state.zoom = clampZoom(state.zoom * (e.deltaY < 0 ? 1.1 : 0.9)); applyTransform(); }, { passive: false });
+  // Evita el zoom de página de Safari al pellizcar sobre el mapa
+  ['gesturestart', 'gesturechange'].forEach(t => vp.addEventListener(t, e => e.preventDefault()));
+}
+
+function handleTap(t) {
+  if (!t || !t.closest) return;
+  const g = t.closest('[data-room]');
+  if (g) return selectRoom(g.dataset.room);
+  const p = t.closest('[data-pin]');
+  if (p) openPin(p.dataset.pin);
+}
+
+function selectRoom(id) {
+  const b = campusData[state.sector];
+  const r = b.rooms.find(x => x.id === id);
+  if (!r) return;
+  state.highlight = id;
+  renderMap();
+  hideToast();
+  openDetail({ title: r.label, cat: r.category, desc: r.desc, faculty: r.faculty, image: b.image, hours: '07:00 - 20:00 hrs', zone: b.title, roomId: r.id });
+}
+function openPin(id) {
+  const b = campusData[state.sector];
+  const p = b.pins.find(x => x.id === id);
+  if (p) openDetail({ title: p.title, cat: p.category, desc: p.desc, faculty: p.faculty, image: b.image, hours: p.hours, zone: b.title, roomId: null });
+}
+
+function openDetail(d) {
+  $('#dImg').src = d.image;
+  $('#dBadge').textContent = (CAT[d.cat] || {}).badge || String(d.cat).toUpperCase();
+  $('#dTitle').textContent = d.title;
+  $('#dDesc').textContent = d.desc;
+  $('#dFaculty').textContent = d.faculty;
+  $('#dHours').textContent = d.hours;
+  $('#dZone').textContent = d.zone;
+  const mine = d.roomId ? scheduleEntries.filter(e => e.roomId === d.roomId) : [];
+  $('#dMine').hidden = !mine.length;
+  $('#dMineList').innerHTML = mine.map(e =>
+    `<div>• ${e.day !== null ? DAY_NAMES[e.day] : 'Día no indicado'}${e.time ? ' · ' + escapeHtml(fmtTime(e)) : ''}${e.subject ? ' — ' + escapeHtml(e.subject) : ''}</div>`).join('');
+  openSheet('detalle');
+}
+
+/* ---------- Aviso flotante ---------- */
+function showToast(title, sub) {
+  $('#toastTitle').textContent = title;
+  $('#toastSub').textContent = sub || '';
+  $('#toast').hidden = false;
+}
+function hideToast() { $('#toast').hidden = true; }
+
+function goToRoom(bKey, id) {
+  const r = campusData[bKey].rooms.find(x => x.id === id);
+  if (!r) return;
+  state.cats[r.category] = true;
+  syncLayerSwitches();
+  state.highlight = id;
+  closeSheets();
+  if (state.view !== 'mapa') showView('mapa');
+  if (state.sector !== bKey) setSector(bKey); else renderMap();
+  const mine = scheduleEntries.filter(e => e.roomId === id);
+  const sub = mine.length
+    ? mine.map(e => `${e.day !== null ? DAY_SHORT[e.day] : ''} ${fmtTime(e)} ${e.subject || ''}`.trim()).join(' · ')
+    : r.desc;
+  showToast(`${r.label} · ${SECTORS.find(s => s[0] === bKey)[1]}`, sub);
+}
+
+/* ---------- Buscador ---------- */
+const ALIASES = { 'bano': 'wc', 'banos': 'wc', 'wc': 'wc', 'sanitario': 'wc', 'sanitarios': 'wc', 'impresora': 'print', 'impresoras': 'print', 'imprimir': 'print', 'cafeteria': 'cafe', 'comida': 'cafe', 'cafe': 'cafe' };
+function doSearch(enter) {
+  const raw = $('#searchInput').value.trim();
+  const q = norm(raw).toLowerCase();
+  $('#clearSearch').hidden = !raw;
+  const box = $('#searchResults');
+  if (!q) { box.hidden = true; return; }
+  const aliasCat = ALIASES[q];
+  const qCompact = q.replace(/[\s-]/g, '');
+  const matches = [];
+  SECTORS.forEach(([bKey, sLabel]) => {
+    campusData[bKey].rooms.forEach(r => {
+      const text = norm(r.id + ' ' + r.label + ' ' + r.desc).toLowerCase();
+      if (text.includes(q) || text.replace(/[\s-]/g, '').includes(qCompact) || (aliasCat && r.category === aliasCat)) matches.push({ r, bKey, sLabel });
+    });
+  });
+  if (enter && matches.length) { pickResult(matches[0].bKey, matches[0].r.id); return; }
+  box.innerHTML = matches.length ? matches.slice(0, 40).map(m =>
+    `<button class="result" data-b="${m.bKey}" data-id="${m.r.id}"><span style="min-width:0"><b>${escapeHtml(m.r.label)}</b><small>${escapeHtml(m.r.desc)}</small></span><span class="where">${m.sLabel}</span></button>`).join('')
+    : '<div class="empty">No encontramos ese lugar. Puedes reportarlo en Sugerencias.</div>';
+  box.hidden = false;
+}
+function pickResult(bKey, id) {
+  $('#searchResults').hidden = true;
+  $('#searchInput').blur();
+  goToRoom(bKey, id);
+}
+function clearSearch() {
+  $('#searchInput').value = '';
+  $('#clearSearch').hidden = true;
+  $('#searchResults').hidden = true;
+  state.highlight = null; hideToast(); renderMap();
+}
+
+/* ---------- Capas ---------- */
+function renderLayers() {
+  $('#layerList').innerHTML = Object.entries(CAT).map(([k, c]) =>
+    `<label class="layer"><span class="dot" style="background:${c.stroke}"></span><span>${c.name}</span>
+      <span class="switch"><input type="checkbox" data-cat="${k}" ${state.cats[k] ? 'checked' : ''}><i></i></span></label>`).join('');
+}
+function syncLayerSwitches() { $$('#layerList input').forEach(i => { i.checked = state.cats[i.dataset.cat]; }); }
+
+/* ---------- Horario ---------- */
+let uid = 0, editingId = null;
+
+function setStatus(msg, type) {
+  const el = $('#scheduleStatus');
+  el.className = 'status ' + (type || 'info');
+  el.textContent = msg;
+  el.hidden = false;
+}
+function setProgress(p) {
+  const bar = $('#progressBar');
+  if (p === null || p === undefined) { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.firstElementChild.style.width = Math.round(Math.min(1, Math.max(0, p)) * 100) + '%';
+}
+function setBusy(on) {
+  $$('#sheet-horario .btn').forEach(b => { b.style.opacity = on ? '.55' : ''; b.style.pointerEvents = on ? 'none' : ''; });
+}
+function updateHorarioBadge() {
+  const n = new Set(scheduleEntries.filter(e => e.roomId).map(e => e.roomId)).size;
+  const b = $('#horarioBadge');
+  b.hidden = !n; b.textContent = n;
+}
+function sortEntries() {
+  scheduleEntries.sort((a, b) => ((a.day ?? 9) - (b.day ?? 9)) || String(a.time).localeCompare(String(b.time)));
+}
+function roomLabel(id) { return id && roomIndex[id] ? roomIndex[id][0].room.label : ''; }
+
+// Convierte lo que el alumno escribe ("i 11", "A-102", "lab quimica", "Hangar") en un salón del mapa
+function resolveRoom(text) {
+  const t = norm(text).toUpperCase().trim();
+  if (!t) return null;
+  const compact = t.replace(/[\s.\-]/g, '');
+  for (const id of Object.keys(roomIndex)) {
+    const lab = norm(roomIndex[id][0].room.label).toUpperCase();
+    if (id === t || id.replace(/-/g, '') === compact || lab === t) return id;
+  }
+  const m = compact.match(/^([A-Z])(\d{1,3})(B?)$/);
+  if (m) { const id = m[1] + m[2].padStart(3, '0') + (m[3] ? '-B' : ''); if (roomIndex[id]) return id; }
+  const f = findRoomsInText(t).found.filter(x => !x.read);
+  if (f.length) return f[0].code;
+  const o = extractRooms(t, true).found;
+  return o[0] || null;
+}
+
+function fillRoomOptions() {
+  const seen = new Set();
+  const opts = [];
+  Object.keys(roomIndex).forEach(id => {
+    const r = roomIndex[id][0].room;
+    if (['wc', 'print'].includes(r.category) || seen.has(r.label)) return;
+    seen.add(r.label); opts.push(r.label);
+  });
+  $('#roomOptions').innerHTML = opts.sort().map(l => `<option value="${escapeHtml(l)}"></option>`).join('');
+}
+
+async function handleScheduleFile(e) {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const name = file.name || '', type = file.type || '';
+  const isCsv = /\.csv$/i.test(name) || /csv|comma-separated/.test(type);
+  const isPdf = /\.pdf$/i.test(name) || type === 'application/pdf';
+  const isImage = /^image\//.test(type) || /\.(jpe?g|png|heic|heif|webp|gif|bmp)$/i.test(name);
+  if (!isCsv && !isPdf && !isImage) { setStatus('Formato no válido. Sube una captura, foto, PDF o CSV.', 'error'); return; }
+  setBusy(true);
+  try {
+    let result;
+    if (isCsv) result = entriesFromRows(parseCSV(await file.text()));
+    else if (isPdf) result = await readPdf(file);
+    else result = await readImage(file);
+    applyResult(result, isCsv ? 'csv' : (isPdf ? 'pdf' : 'image'));
+  } catch (err) {
+    setStatus('No se pudo leer tu horario: ' + err.message + '. También puedes escribir tus salones a mano.', 'error');
+  } finally {
+    setBusy(false); setProgress(null);
+  }
+}
+
+const addHour = t => { const c = cleanTime(t); if (!c) return ''; const h = parseInt(c) + 1; return String(h).padStart(2, '0') + c.slice(2); };
+const fmtTime = e => (e.time ? cleanTime(e.time) || e.time : '') + (e.end ? '–' + e.end : '');
+// Une clases seguidas del mismo salón (07:00, 08:00, 09:00 → 07:00–10:00)
+function mergeHours(list) {
+  const words = t => norm(t).toLowerCase().split(/[^a-z]+/).filter(w => w.length >= 4);
+  const same = (a, b) => {
+    const x = norm(a).toLowerCase(), y = norm(b).toLowerCase();
+    if (!x || !y || x === y || lev(x, y) <= Math.max(3, Math.min(x.length, y.length) * 0.3)) return true;
+    // aunque la lectura venga con errores, si comparten palabras («computadora», «asistido») es la misma materia
+    const wy = words(y);
+    return words(x).filter(w => wy.some(v => lev(w, v) <= (w.length >= 7 ? 2 : 1))).length >= 2;
+  };
+  const out = [];
+  [...list].sort((a, b) => ((a.day ?? 9) - (b.day ?? 9)) || String(a.time).localeCompare(String(b.time))).forEach(e => {
+    const prev = out[out.length - 1], t = cleanTime(e.time);
+    if (prev && prev.day === e.day && prev.roomId === e.roomId && t && (prev.end || addHour(prev.time)) === t && same(prev.subject, e.subject)) {
+      prev.end = addHour(t); prev.review = prev.review || e.review;
+      if (!prev.subject && e.subject) prev.subject = e.subject;
+      return;
+    }
+    out.push({ ...e });
+  });
+  return out;
+}
+
+function applyResult(result, kind) {
+  const seen = new Set();
+  scheduleEntries = result.entries.filter(x => {
+    const k = `${x.roomId}|${x.day}|${x.time}`;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  }).map(x => ({ id: ++uid, day: x.day ?? null, time: x.time || '', subject: x.subject || '', roomId: x.roomId, review: !!x.review, read: x.read || '' }));
+  scheduleEntries = mergeHours(scheduleEntries);
+  sortEntries();
+  selectedDay = 'all'; editingId = null;
+  const unknown = [...new Set(result.unknown || [])].filter(c => !roomIndex[c]);
+  if (!scheduleEntries.length) {
+    setStatus(kind === 'csv'
+      ? 'No encontré salones en tu CSV. Revisa que tenga una columna "salon" con claves como I011 o A102.'
+      : 'No encontré salones en tu archivo. Prueba con una captura de pantalla (se lee mejor que una foto) o escribe tus salones a mano.', 'error');
+  } else {
+    const rooms = new Set(scheduleEntries.map(x => x.roomId)).size;
+    const rev = scheduleEntries.filter(x => x.review).length;
+    setStatus(`✅ Encontramos ${scheduleEntries.length} clase(s) en ${rooms} salón(es).` +
+      (rev ? ` Revisa ${rev === 1 ? 'la marcada' : 'las ' + rev + ' marcadas'} en amarillo.` : '') +
+      (kind === 'csv' ? '' : ' Si falta alguna, toca «Agregar clase».'), 'ok');
+  }
+  renderScheduleList(unknown);
+  renderMap();
+}
+
+function startManual() {
+  $('#scheduleStatus').hidden = true;
+  addClass();
+}
+function addClass() {
+  const today = (new Date().getDay() + 6) % 7;
+  const e = { id: ++uid, day: today <= 5 ? today : 0, time: '', subject: '', roomId: null, review: false, read: '', isNew: true };
+  scheduleEntries.push(e);
+  editingId = e.id;
+  if (selectedDay !== 'all' && selectedDay !== e.day) selectedDay = 'all';
+  renderScheduleList();
+  setTimeout(() => { const i = document.querySelector('.editor [data-f="room"]'); if (i) { i.focus(); i.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, 60);
+}
+
+const ICON_EDIT = '<svg class="i sm" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+function rowHtml(e) {
+  if (e.id === editingId) return editorHtml(e);
+  const sec = SECTORS.find(s => s[0] === (roomIndex[e.roomId] || [{}])[0].buildingKey);
+  return `<div class="classItem ${e.review ? 'needs' : ''}" data-id="${e.id}">
+    <button class="ciMain" data-act="go">
+      <span class="code">${escapeHtml(roomLabel(e.roomId))}</span>
+      <span class="info"><span>${escapeHtml(e.subject) || 'Clase'}</span>
+      <small>${e.day !== null ? DAY_SHORT[e.day] : 'Sin día'}${e.time ? ' ' + escapeHtml(fmtTime(e)) : ''} · ${sec ? sec[1] : ''}${e.review ? ' · <em>Revisa</em>' : ''}</small></span>
+    </button>
+    <button class="iconbtn ciEdit" data-act="edit" aria-label="Editar">${ICON_EDIT}</button>
+  </div>`;
+}
+function editorHtml(e) {
+  const dayOpts = DAY_NAMES.map((n, i) => `<option value="${i}" ${e.day === i ? 'selected' : ''}>${n}</option>`).join('') +
+    `<option value="" ${e.day === null ? 'selected' : ''}>Sin día</option>`;
+  const roomVal = e.roomId ? roomLabel(e.roomId) : e.read;
+  return `<div class="editor" data-id="${e.id}">
+    ${e.review && e.read ? `<p class="hintSm">El lector vio «${escapeHtml(e.read)}». Confirma o corrige el salón.</p>` : ''}
+    <label>Salón<input data-f="room" list="roomOptions" value="${escapeHtml(roomVal)}" placeholder="Ej. I011, A102, Hangar" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false"></label>
+    <div class="grid2">
+      <label>Día<select data-f="day">${dayOpts}</select></label>
+      <label>Hora<input type="time" data-f="time" value="${cleanTime(e.time)}"></label>
+    </div>
+    <label>Materia (opcional)<input data-f="subject" value="${escapeHtml(e.subject)}" placeholder="Ej. Cálculo"></label>
+    <div class="err" hidden></div>
+    <div class="row2"><button class="btn ghost" data-act="del">Eliminar</button><button class="btn sky" data-act="save">Guardar</button></div>
+  </div>`;
+}
+
+function saveEditor(box) {
+  const id = Number(box.dataset.id);
+  const e = scheduleEntries.find(x => x.id === id);
+  if (!e) return;
+  const roomText = box.querySelector('[data-f="room"]').value;
+  const roomId = resolveRoom(roomText);
+  const err = box.querySelector('.err');
+  if (!roomId) {
+    err.textContent = roomText.trim() ? `No encontramos «${roomText.trim()}» en el mapa. Revisa la clave o elige una de la lista.` : 'Escribe el salón.';
+    err.hidden = false;
+    return;
+  }
+  const dv = box.querySelector('[data-f="day"]').value;
+  const newTime = box.querySelector('[data-f="time"]').value;
+  if (newTime !== cleanTime(e.time)) e.end = '';
+  Object.assign(e, { roomId, day: dv === '' ? null : Number(dv), time: newTime, subject: box.querySelector('[data-f="subject"]').value.trim(), review: false, read: '', isNew: false });
+  editingId = null;
+  sortEntries();
+  renderScheduleList(); renderMap();
+}
+
+function renderScheduleList(notFound) {
+  const res = $('#scheduleResults');
+  const has = scheduleEntries.length > 0;
+  res.hidden = !has;
+  $('#startBox').hidden = has;
+  if (!has) { $('#notFoundBox').hidden = true; updateHorarioBadge(); return; }
+  const days = [...new Set(scheduleEntries.map(e => e.day).filter(d => d !== null))].sort();
+  const chip = (v, label) => `<button class="dayChip ${selectedDay === v ? 'active' : ''}" data-day="${v}">${label}</button>`;
+  $('#dayChips').innerHTML = days.length > 1 ? chip('all', 'Todos') + days.map(d => chip(d, DAY_SHORT[d])).join('') : '';
+  const visible = scheduleEntries.filter(e => e.id === editingId || selectedDay === 'all' || e.day === selectedDay || e.day === null);
+  $('#scheduleList').innerHTML = visible.map(rowHtml).join('') || '<div class="empty">No tienes clases este día.</div>';
+  const rev = scheduleEntries.filter(e => e.review).length;
+  const nOk = scheduleEntries.filter(e => e.roomId).length;
+  $('#resTitle').textContent = nOk ? `Tus clases (${nOk})` : 'Agrega tu primera clase';
+  $('#reviewCount').textContent = rev ? `${rev} por revisar` : '';
+  if (notFound !== undefined) {
+    const box = $('#notFoundBox');
+    box.hidden = !notFound.length;
+    if (notFound.length) box.innerHTML = `⚠️ Leímos estos salones, pero aún no están en el mapa: <b>${notFound.map(escapeHtml).join(', ')}</b>. <button data-go="sugerencias">Avísanos</button>`;
+  }
+  updateHorarioBadge();
+}
+
+function onListClick(ev) {
+  const btn = ev.target.closest('[data-act]');
+  if (!btn) return;
+  const holder = btn.closest('[data-id]');
+  const id = Number(holder.dataset.id);
+  const e = scheduleEntries.find(x => x.id === id);
+  const act = btn.dataset.act;
+  if (act === 'go' && e && e.roomId) goToRoom(roomIndex[e.roomId][0].buildingKey, e.roomId);
+  else if (act === 'edit') {
+    // Si había otra clase nueva sin guardar, se descarta
+    scheduleEntries = scheduleEntries.filter(x => !(x.isNew && x.id !== id && !x.roomId));
+    editingId = id; renderScheduleList();
+    setTimeout(() => { const i = document.querySelector('.editor [data-f="room"]'); if (i) i.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);
+  }
+  else if (act === 'save') saveEditor(holder);
+  else if (act === 'del') {
+    scheduleEntries = scheduleEntries.filter(x => x.id !== id);
+    editingId = null;
+    renderScheduleList(); renderMap();
+  }
+}
+
+function clearSchedule() {
+  scheduleEntries = []; selectedDay = 'all'; state.highlight = null; editingId = null;
+  $('#scheduleStatus').hidden = true;
+  renderScheduleList([]);
+  hideToast(); renderMap();
+}
+
+function downloadTemplate() {
+  const csv = 'dia,hora,materia,salon\nLunes,07:00,Cálculo,I011\nLunes,09:00,Inglés técnico,Lab Idiomas\nMartes,07:00,Física,A102\nMiércoles,11:00,Dibujo,F103\nJueves,08:00,Química,Laboratorio Química\nViernes,10:00,Taller,Hangar\n';
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('﻿' + csv);
+  a.download = 'plantilla_horario_unaq.csv';
+  a.target = '_blank';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ---------- Conexión de botones ---------- */
+function bind() {
+  $('#menuBtn').addEventListener('click', openDrawer);
+  $('#drawerScrim').addEventListener('click', closeDrawer);
+  $$('.navItem').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
+  // Ignora el "clic fantasma" que algunos celulares envían justo después de tocar el mapa
+  $('#sheetScrim').addEventListener('click', () => { if (Date.now() - (state.sheetOpenedAt || 0) > 450) closeSheets(); });
+  $$('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
+
+  $('#openHorario').addEventListener('click', () => openSheet('horario'));
+  $('#openCapas').addEventListener('click', () => openSheet('capas'));
+  $('#zoomIn').addEventListener('click', () => { state.zoom = clampZoom(state.zoom * 1.3); applyTransform(); });
+  $('#zoomOut').addEventListener('click', () => { state.zoom = clampZoom(state.zoom / 1.3); applyTransform(); });
+  $('#zoomReset').addEventListener('click', () => { state.zoom = 1; state.panX = 0; state.panY = 0; applyTransform(); });
+
+  $('#sectorChips').addEventListener('click', e => { const c = e.target.closest('[data-sector]'); if (c) { state.highlight = null; hideToast(); setSector(c.dataset.sector); } });
+  $('#searchInput').addEventListener('input', () => doSearch(false));
+  $('#searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doSearch(true); } });
+  $('#searchInput').addEventListener('focus', () => { if ($('#searchInput').value.trim()) doSearch(false); });
+  $('#clearSearch').addEventListener('click', clearSearch);
+  $('#searchResults').addEventListener('click', e => { const r = e.target.closest('.result'); if (r) pickResult(r.dataset.b, r.dataset.id); });
+
+  $('#toast').addEventListener('click', () => { if (state.highlight) selectRoom(state.highlight); });
+
+  $('#scheduleFile').addEventListener('change', handleScheduleFile);
+  $('#clearSchedule').addEventListener('click', clearSchedule);
+  $('#downloadTemplate').addEventListener('click', downloadTemplate);
+  $('#dayChips').addEventListener('click', e => {
+    const c = e.target.closest('[data-day]'); if (!c) return;
+    selectedDay = c.dataset.day === 'all' ? 'all' : Number(c.dataset.day);
+    renderScheduleList(); renderMap();
+  });
+  $('#scheduleList').addEventListener('click', onListClick);
+  $('#scheduleList').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('.editor input')) { e.preventDefault(); saveEditor(e.target.closest('.editor')); } });
+  $('#manualBtn').addEventListener('click', startManual);
+  $('#addClass').addEventListener('click', addClass);
+  $('#notFoundBox').addEventListener('click', e => { if (e.target.closest('[data-go]')) showView('sugerencias'); });
+
+  $('#layerList').addEventListener('change', e => { const i = e.target.closest('[data-cat]'); if (i) { state.cats[i.dataset.cat] = i.checked; renderMap(); } });
+  $('#showAll').addEventListener('click', () => { Object.keys(state.cats).forEach(k => state.cats[k] = true); syncLayerSwitches(); renderMap(); });
+
+  // Arrastrar hacia abajo para cerrar las hojas
+  $$('.sheet').forEach(sheet => {
+    let y0 = null;
+    const head = [sheet.querySelector('.grab'), sheet.querySelector('.sheetHead')];
+    head.forEach(h => {
+      h.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; }, { passive: true });
+      h.addEventListener('touchend', e => { if (y0 !== null && e.changedTouches[0].clientY - y0 > 60) closeSheets(); y0 = null; });
+    });
+  });
+
+  setTimeout(() => { const h = $('#mapHint'); if (h) h.style.display = 'none'; }, 6000);
+}
+
+bind();
+fillRoomOptions();
+renderLayers();
+initGestures();
+setSector('principal');
+</script>
+</body>
+</html>
