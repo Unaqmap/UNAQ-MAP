@@ -1313,6 +1313,22 @@
     const PDFJS_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
     const PDFJS_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
     let ocrWorker = null;
+    // Carga pdf.js; si el primer servidor falla, usa uno de respaldo
+    let pdfjsPromise = null;
+    function getPdfjs() {
+      if (!pdfjsPromise) pdfjsPromise = (async () => {
+        try {
+          const m = await import(PDFJS_URL);
+          m.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+          return m;
+        } catch (e) {
+          await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          return window.pdfjsLib;
+        }
+      })().catch(e => { pdfjsPromise = null; throw e; });
+      return pdfjsPromise;
+    }
 
     function loadScriptOnce(src, globalName) {
       return new Promise((resolve, reject) => {
@@ -1372,8 +1388,7 @@
     async function readPdf(file) {
       setStatus('Abriendo el PDF…', 'info'); setProgress(0.1);
       let pdfjs;
-      try { pdfjs = await import(PDFJS_URL); } catch (e) { throw new Error('no se pudo descargar el lector de PDF. Revisa tu conexión a internet'); }
-      pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+      try { pdfjs = await getPdfjs(); } catch (e) { throw new Error('no se pudo descargar el lector de PDF. Revisa tu conexión a internet'); }
       const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
       const words = [];
       let offset = 0;
@@ -1462,12 +1477,22 @@ async function loadPdf() {
   }
   // PDF propio: se dibuja página por página (un iframe con PDF en iPhone solo muestra la primera hoja)
   slot.innerHTML = `<div class="pdfPages" id="pdfPages"><div class="empty">Cargando el marco teórico…</div></div>
-    <a class="btn sky full" href="${url}" target="_blank" rel="noopener" style="text-decoration:none;margin-top:12px">Abrir o descargar el PDF</a>`;
+    <a class="btn sky full" id="pdfOpen" href="${encodeURI(url)}" target="_blank" rel="noopener" style="text-decoration:none;margin-top:12px">Abrir o descargar el PDF</a>`;
   const box = $('#pdfPages');
   try {
-    const pdfjs = await import(PDFJS_URL);
-    pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-    const doc = await pdfjs.getDocument({ url: new URL(url, location.href).href }).promise;
+    // Busca el archivo aunque se haya subido con otro nombre (con acento, con espacio…)
+    const names = [url, 'marco_teorico.pdf', 'marco teórico.pdf', 'marco_teórico.pdf', 'Marco teórico.pdf', 'Marco_teorico.pdf', 'marco teorico.pdf'];
+    let found = null;
+    for (const n of [...new Set(names)]) {
+      try {
+        const r = await fetch(new URL(encodeURI(n), location.href).href, { method: 'HEAD', cache: 'no-store' });
+        if (r.ok) { found = n; break; }
+      } catch (e) { /* se prueba el siguiente nombre */ }
+    }
+    if (!found) throw new Error('no se encontró el archivo del PDF');
+    $('#pdfOpen').href = encodeURI(found);
+    const pdfjs = await getPdfjs();
+    const doc = await pdfjs.getDocument({ url: new URL(encodeURI(found), location.href).href }).promise;
     box.innerHTML = '';
     const w = box.clientWidth - 16 || 320, dpr = Math.min(2, window.devicePixelRatio || 1);
     for (let n = 1; n <= doc.numPages; n++) {
